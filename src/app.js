@@ -2,9 +2,8 @@ import express from "express";
 import cors from "cors";
 import cookieParser from "cookie-parser";
 
-// Import Routes
 import authRoutes from "./routes/authRoutes.js";
-
+import fileRoutes from './routes/fileRoutes.js';
 const app = express();
 
 app.use(cookieParser());
@@ -26,7 +25,7 @@ app.use(
 
 
 app.use("/api/auth", authRoutes);
-
+app.use('/api/files', fileRoutes);
 
 app.get("/", (req, res) => {
   res.json({
