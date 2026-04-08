@@ -4,11 +4,12 @@ import cookieParser from "cookie-parser";
 
 import authRoutes from "./routes/authRoutes.js";
 import fileRoutes from './routes/fileRoutes.js';
+import heraldSilaneRoutes from './routes/heraldSilaneRoutes.js';
+
 const app = express();
 
 app.use(cookieParser());
 app.use(express.json());
-
 
 app.use(
   cors({
@@ -23,9 +24,9 @@ app.use(
   })
 );
 
-
 app.use("/api/auth", authRoutes);
 app.use('/api/files', fileRoutes);
+app.use('/api/herald_silane', heraldSilaneRoutes);
 
 app.get("/", (req, res) => {
   res.json({
