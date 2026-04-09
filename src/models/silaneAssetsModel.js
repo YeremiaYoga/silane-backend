@@ -65,3 +65,20 @@ export const deleteHeraldSilane = async (id) => {
     .delete()
     .eq("id", id);
 };
+
+export const insertSilaneMedia = async (type, data) => {
+  const tableName = type === "images" ? "silane_image" : `silane_${type}`;
+  return await supabase
+    .from(tableName)
+    .insert([data])
+    .select("*")
+    .single();
+};
+
+export const getSilaneMediaByIds = async (type, ids) => {
+  const tableName = type === "images" ? "silane_image" : `silane_${type}`;
+  return await supabase
+    .from(tableName)
+    .select("uuid, link")
+    .in("uuid", ids);
+};

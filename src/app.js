@@ -4,7 +4,7 @@ import cookieParser from "cookie-parser";
 
 import authRoutes from "./routes/authRoutes.js";
 import fileRoutes from './routes/fileRoutes.js';
-import heraldSilaneRoutes from './routes/heraldSilaneRoutes.js';
+import silaneAssetsRoutes from './routes/silaneAssetsRoutes.js';
 
 const app = express();
 
@@ -26,7 +26,7 @@ app.use(
 
 app.use("/api/auth", authRoutes);
 app.use('/api/files', fileRoutes);
-app.use('/api/herald_silane', heraldSilaneRoutes);
+app.use('/api/silane_assets', silaneAssetsRoutes);
 
 app.get("/", (req, res) => {
   res.json({

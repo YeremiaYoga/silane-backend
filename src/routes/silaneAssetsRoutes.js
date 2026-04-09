@@ -1,5 +1,5 @@
 import express from 'express';
-import { uploadMedia, getDataSilane } from '../controllers/heraldSilaneController.js';
+import { uploadMedia, getDataSilane } from '../controllers/silaneAssetsController.js';
 import upload from '../middlewares/uploadMiddleware.js'; 
 import { verifyToken } from '../middlewares/authMiddleware.js';
 
