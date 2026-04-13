@@ -3,7 +3,7 @@ import cors from "cors";
 import cookieParser from "cookie-parser";
 
 import authRoutes from "./routes/authRoutes.js";
-import fileRoutes from './routes/fileRoutes.js';
+
 import silaneAssetsRoutes from './routes/silaneAssetsRoutes.js';
 
 const app = express();
@@ -25,7 +25,6 @@ app.use(
 );
 
 app.use("/api/auth", authRoutes);
-app.use('/api/files', fileRoutes);
 app.use('/api/silane_assets', silaneAssetsRoutes);
 
 app.get("/", (req, res) => {

@@ -4,7 +4,7 @@ import {
   getHeraldSilaneByUserId,
   updateHeraldSilaneByUserId,
   insertSilaneMedia,
-  getSilaneMediaByIds
+  getSilaneMediaByIds,
 } from "../models/silaneAssetsModel.js";
 
 const bucketName = process.env.MINIO_BUCKET_NAME;
@@ -22,25 +22,33 @@ export const uploadMedia = async (req, res) => {
     if (!userId) {
       return res.status(401).json({ message: "Access denied: Invalid user." });
     }
-    
+
     if (type !== "images") {
-      return res.status(400).json({ message: "Invalid file type. Currently only supports images." });
+      return res
+        .status(400)
+        .json({
+          message: "Invalid file type. Currently only supports images.",
+        });
     }
 
-    let { data: userData, error: fetchError } = await getHeraldSilaneByUserId(userId);
+    let { data: userData, error: fetchError } =
+      await getHeraldSilaneByUserId(userId);
     if (fetchError || !userData?.public_id) {
-      return res.status(404).json({ message: "Silane profile data not found." });
+      return res
+        .status(404)
+        .json({ message: "Silane profile data not found." });
     }
 
     const file = req.file;
-    const safeOriginalName = file.originalname.replace(/\s+/g, "-");
-    const fileName = `${Date.now()}-${safeOriginalName}`;
+    const baseName = file.originalname
+      .replace(/\.[^/.]+$/, "")
+      .replace(/\s+/g, "-");
+    const fileName = `${Date.now()}-${baseName}.webp`;
     const objectPath = `${userData.public_id}/${fileName}`;
-    const finalName = customName ? customName.trim() : safeOriginalName;
+    const finalName = customName ? customName.trim() : baseName;
 
     const bufferToUpload = await sharp(file.buffer)
-      .resize({ width: 1920, height: 1920, fit: 'inside', withoutEnlargement: true })
-      .jpeg({ quality: 80, progressive: true })
+      .webp({ quality: 80 })
       .toBuffer();
 
     await minioClient.putObject(
@@ -48,32 +56,37 @@ export const uploadMedia = async (req, res) => {
       objectPath,
       bufferToUpload,
       bufferToUpload.length,
-      { "Content-Type": 'image/jpeg' }
+      { "Content-Type": "image/webp" },
     );
 
-    const { data: savedMediaData, error: mediaError } = await insertSilaneMedia("images", {
-      name: finalName,
-      user_id: userId,
-      link: objectPath
-    });
+    const { data: savedMediaData, error: mediaError } = await insertSilaneMedia(
+      "images",
+      {
+        name: finalName,
+        user_id: userId,
+        link: objectPath,
+      },
+    );
 
     if (mediaError) throw mediaError;
 
     const currentFiles = userData.images || [];
     currentFiles.push({
       id: savedMediaData.uuid,
-      name: savedMediaData.name
+      name: savedMediaData.name,
     });
-    
+
     await updateHeraldSilaneByUserId(userId, { images: currentFiles });
 
     res.status(200).json({
-      message: `Image uploaded successfully`,
+      message: "Image uploaded successfully",
       file: savedMediaData,
     });
   } catch (error) {
     console.error(error);
-    res.status(500).json({ message: "Failed to upload media", error: error.message });
+    res
+      .status(500)
+      .json({ message: "Failed to upload media", error: error.message });
   }
 };
 
@@ -94,22 +107,31 @@ export const getDataSilane = async (req, res) => {
     }
 
     if (data.images && data.images.length > 0) {
-      const imageIds = data.images.map(img => img.id);
-      const { data: mediaRecords, error: mediaErr } = await getSilaneMediaByIds("images", imageIds);
-      
+      const imageIds = data.images.map((img) => img.id);
+      const { data: mediaRecords, error: mediaErr } = await getSilaneMediaByIds(
+        "images",
+        imageIds,
+      );
+
       if (!mediaErr && mediaRecords) {
         const urlMap = {};
-        await Promise.all(mediaRecords.map(async (record) => {
-          try {
-            urlMap[record.uuid] = await minioClient.presignedGetObject(bucketName, record.link, 24 * 60 * 60);
-          } catch (err) {
-            console.error(err);
-          }
-        }));
+        await Promise.all(
+          mediaRecords.map(async (record) => {
+            try {
+              urlMap[record.uuid] = await minioClient.presignedGetObject(
+                bucketName,
+                record.link,
+                24 * 60 * 60,
+              );
+            } catch (err) {
+              console.error(err);
+            }
+          }),
+        );
 
-        data.images = data.images.map(img => ({
+        data.images = data.images.map((img) => ({
           ...img,
-          url: urlMap[img.id] || null
+          url: urlMap[img.id] || null,
         }));
       }
     }
@@ -117,7 +139,9 @@ export const getDataSilane = async (req, res) => {
     res.status(200).json({ data });
   } catch (error) {
     console.error(error);
-    res.status(500).json({ message: "Failed to fetch Silane data", error: error.message });
+    res
+      .status(500)
+      .json({ message: "Failed to fetch Silane data", error: error.message });
   }
 };
 
@@ -130,10 +154,13 @@ export const deleteMedia = async (req, res) => {
       return res.status(401).json({ message: "Access denied" });
     }
     if (!ids || !Array.isArray(ids) || type !== "images") {
-      return res.status(400).json({ message: "Invalid data or type is not images" });
+      return res
+        .status(400)
+        .json({ message: "Invalid data or type is not images" });
     }
 
-    const { data: userData, error: fetchError } = await getHeraldSilaneByUserId(userId);
+    const { data: userData, error: fetchError } =
+      await getHeraldSilaneByUserId(userId);
     if (fetchError) throw fetchError;
 
     const currentFiles = userData.images || [];
@@ -141,9 +168,13 @@ export const deleteMedia = async (req, res) => {
 
     await updateHeraldSilaneByUserId(userId, { images: updatedFiles });
 
-    res.status(200).json({ message: `Successfully deleted ${ids.length} item(s)` });
+    res
+      .status(200)
+      .json({ message: `Successfully deleted ${ids.length} item(s)` });
   } catch (error) {
     console.error(error);
-    res.status(500).json({ message: "Failed to delete media", error: error.message });
+    res
+      .status(500)
+      .json({ message: "Failed to delete media", error: error.message });
   }
 };
