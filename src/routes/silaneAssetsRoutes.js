@@ -1,11 +1,17 @@
-import express from 'express';
-import { uploadMedia, getDataSilane } from '../controllers/silaneAssetsController.js';
-import upload from '../middlewares/uploadMiddleware.js'; 
-import { verifyToken } from '../middlewares/authMiddleware.js';
+import express from "express";
+import {
+  uploadMedia,
+  getDataSilane,
+  updateVisageData,
+  uploadVisageImage
+} from "../controllers/silaneAssetsController.js";
+import upload from "../middlewares/uploadMiddleware.js";
+import { verifyToken } from "../middlewares/authMiddleware.js";
 
 const router = express.Router();
 
-router.get('/data', verifyToken, getDataSilane);
-router.post('/upload', verifyToken, upload.single('file'), uploadMedia);
-
+router.get("/data", verifyToken, getDataSilane);
+router.post("/upload", verifyToken, upload.single("file"), uploadMedia);
+router.post("/visage/update", verifyToken, updateVisageData);
+router.post('/upload_visage', verifyToken, upload.single('file'), uploadVisageImage);
 export default router;

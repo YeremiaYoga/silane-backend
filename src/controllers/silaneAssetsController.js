@@ -6,7 +6,7 @@ import {
   insertSilaneMedia,
   getSilaneMediaByIds,
 } from "../models/silaneAssetsModel.js";
-
+import crypto from "crypto";
 const bucketName = process.env.MINIO_BUCKET_NAME;
 
 export const uploadMedia = async (req, res) => {
@@ -24,11 +24,9 @@ export const uploadMedia = async (req, res) => {
     }
 
     if (type !== "images") {
-      return res
-        .status(400)
-        .json({
-          message: "Invalid file type. Currently only supports images.",
-        });
+      return res.status(400).json({
+        message: "Invalid file type. Currently only supports images.",
+      });
     }
 
     let { data: userData, error: fetchError } =
@@ -176,5 +174,88 @@ export const deleteMedia = async (req, res) => {
     res
       .status(500)
       .json({ message: "Failed to delete media", error: error.message });
+  }
+};
+
+export const updateVisageData = async (req, res) => {
+  try {
+    const userId = req.user?.id;
+    const { visage } = req.body;
+
+    if (!userId) {
+      return res.status(401).json({ message: "Access denied" });
+    }
+
+    if (!visage) {
+      return res.status(400).json({ message: "No visage data provided" });
+    }
+
+    const updatedData = await updateHeraldSilaneByUserId(userId, { visage });
+
+    res.status(200).json({
+      message: "Visage data successfully updated",
+      data: updatedData.visage,
+    });
+  } catch (error) {
+    console.error("Error updating visage data:", error);
+    res.status(500).json({
+      message: "Failed to update visage data",
+      error: error.message,
+    });
+  }
+};
+
+export const uploadVisageImage = async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ message: "No file uploaded." });
+    }
+
+    const userId = req.user?.id || req.body.user_id;
+    if (!userId) {
+      return res.status(401).json({ message: "Access denied." });
+    }
+
+    let { data: userData, error: fetchError } =
+      await getHeraldSilaneByUserId(userId);
+    if (fetchError || !userData?.public_id) {
+      return res
+        .status(404)
+        .json({ message: "Silane profile data not found." });
+    }
+
+    // Generate Nama File: Tanggal-Random (Tanpa tulisan 'visage-')
+    const file = req.file;
+    const dateStr = Date.now();
+    const randomStr = Math.random().toString(36).substring(2, 8);
+    const fileName = `${dateStr}-${randomStr}.webp`;
+
+    // Path di dalam bucket (Folder User ID / Nama File)
+    const objectPath = `${userData.public_id}/${fileName}`;
+
+    const bufferToUpload = await sharp(file.buffer)
+      .webp({ quality: 80 })
+      .toBuffer();
+
+    await minioClient.putObject(
+      process.env.MINIO_BUCKET_NAME,
+      objectPath,
+      bufferToUpload,
+      bufferToUpload.length,
+      { "Content-Type": "image/webp" },
+    );
+
+    const fullUrl = `https://${process.env.MINIO_ENDPOINT}/${process.env.MINIO_BUCKET_NAME}/${objectPath}`;
+
+    // Kembalikan Full URL ke frontend
+    res.status(200).json({
+      message: "Visage image uploaded successfully",
+      url: fullUrl, 
+    });
+  } catch (error) {
+    console.error(error);
+    res
+      .status(500)
+      .json({ message: "Failed to upload visage image", error: error.message });
   }
 };
