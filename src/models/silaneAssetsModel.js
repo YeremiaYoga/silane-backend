@@ -8,11 +8,7 @@ export const getAllHeraldSilanes = async () => {
 };
 
 export const getHeraldSilaneById = async (id) => {
-  return await supabase
-    .from("herald_silane")
-    .select("*")
-    .eq("id", id)
-    .single();
+  return await supabase.from("herald_silane").select("*").eq("id", id).single();
 };
 
 export const getHeraldSilaneByUserId = async (userId) => {
@@ -60,27 +56,17 @@ export const updateHeraldSilaneByUserId = async (userId, updateData) => {
 };
 
 export const deleteHeraldSilane = async (id) => {
-  return await supabase
-    .from("herald_silane")
-    .delete()
-    .eq("id", id);
+  return await supabase.from("herald_silane").delete().eq("id", id);
 };
 
 export const insertSilaneMedia = async (type, data) => {
   const tableName = type === "images" ? "silane_image" : `silane_${type}`;
-  return await supabase
-    .from(tableName)
-    .insert([data])
-    .select("*")
-    .single();
+  return await supabase.from(tableName).insert([data]).select("*").single();
 };
 
 export const getSilaneMediaByIds = async (type, ids) => {
   const tableName = type === "images" ? "silane_image" : `silane_${type}`;
-  return await supabase
-    .from(tableName)
-    .select("uuid, link")
-    .in("uuid", ids);
+  return await supabase.from(tableName).select("uuid, link").in("uuid", ids);
 };
 
 export const upsertSilaneVisage = async (profilesData) => {
@@ -93,19 +79,16 @@ export const upsertSilaneVisage = async (profilesData) => {
 
 export const getSilaneVisageByIds = async (ids) => {
   if (!ids || ids.length === 0) return { data: [] };
-  return await supabase
-    .from("silane_visage")
-    .select("*")
-    .in("id", ids);
+  return await supabase.from("silane_visage").select("*").in("id", ids);
 };
 
-export const deleteOrphanedVisageProfiles = async (userId, activeProfileIds) => {
+export const deleteOrphanedVisageProfiles = async (
+  userId,
+  activeProfileIds,
+) => {
   if (!activeProfileIds || activeProfileIds.length === 0) {
     // Jika user menghapus SEMUA profilnya, hapus semua dari database
-    return await supabase
-      .from("silane_visage")
-      .delete()
-      .eq("user_id", userId);
+    return await supabase.from("silane_visage").delete().eq("user_id", userId);
   }
 
   // Hapus profil milik user ini yang ID-nya TIDAK ADA di dalam array activeProfileIds
@@ -114,4 +97,9 @@ export const deleteOrphanedVisageProfiles = async (userId, activeProfileIds) => 
     .delete()
     .eq("user_id", userId)
     .not("id", "in", `(${activeProfileIds.join(",")})`);
+};
+
+export const deleteSilaneMediaByIds = async (type, ids) => {
+  const tableName = type === "images" ? "silane_image" : `silane_${type}`;
+  return await supabase.from(tableName).delete().in("uuid", ids);
 };

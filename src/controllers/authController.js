@@ -43,7 +43,7 @@ export const loginFoundry = async (req, res, next) => {
     const token = jwt.sign(
       { id: user.id, username: user.username, role: user.role },
       process.env.JWT_SECRET,
-      { expiresIn: "30d" }
+      { expiresIn: "30d" } // Sesuai instruksi 30 hari
     );
 
     return res.json({
@@ -55,6 +55,7 @@ export const loginFoundry = async (req, res, next) => {
         username: user.username,
         role: user.role,
         profile_picture: user.profile_picture,
+        limits: user.limits, 
       },
     });
   } catch (error) {

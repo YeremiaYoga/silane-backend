@@ -4,7 +4,7 @@ import supabase from "../utils/db.js";
 export const getUserByLoginHash = async (loginHash) => {
   const { data, error } = await supabase
     .from("users")
-    .select("id, username, role, email, profile_picture")
+    .select("id, username, role, email, profile_picture, limits") 
     .eq("fvtt_login_hash", loginHash)
     .maybeSingle();
 

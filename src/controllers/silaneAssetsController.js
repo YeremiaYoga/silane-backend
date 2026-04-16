@@ -1,5 +1,10 @@
-import minioClient from "../utils/minio.js";
-import sharp from "sharp";
+import crypto from "crypto";
+import {
+  uploadAssetToR2,
+  getFileSizeFromR2,
+  deleteAssetFromR2,
+} from "../utils/r2.js";
+
 import {
   getHeraldSilaneByUserId,
   updateHeraldSilaneByUserId,
@@ -7,9 +12,18 @@ import {
   getSilaneMediaByIds,
   upsertSilaneVisage,
   getSilaneVisageByIds,
+  deleteOrphanedVisageProfiles,
+  deleteSilaneMediaByIds,
 } from "../models/silaneAssetsModel.js";
-import crypto from "crypto";
-const bucketName = process.env.MINIO_BUCKET_NAME;
+
+const generateRandomFileName = (originalName) => {
+  const ext = originalName.includes(".")
+    ? originalName.substring(originalName.lastIndexOf("."))
+    : "";
+  const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, "");
+  const randomStr = crypto.randomBytes(8).toString("hex");
+  return `${dateStr}-${randomStr}${ext}`;
+};
 
 export const uploadMedia = async (req, res) => {
   try {
@@ -20,6 +34,16 @@ export const uploadMedia = async (req, res) => {
     const userId = req.user?.id || req.body.user_id;
     const type = req.body.type;
     const customName = req.body.customName;
+    
+    // 🔥 Tangkap data tags (dikirim sebagai JSON string dari frontend)
+    let tagsArray = [];
+    if (req.body.tags) {
+      try {
+        tagsArray = JSON.parse(req.body.tags);
+      } catch (e) {
+        console.warn("Failed to parse tags:", e.message);
+      }
+    }
 
     if (!userId) {
       return res.status(401).json({ message: "Access denied: Invalid user." });
@@ -39,48 +63,48 @@ export const uploadMedia = async (req, res) => {
         .json({ message: "Silane profile data not found." });
     }
 
-    const file = req.file;
-    const baseName = file.originalname
-      .replace(/\.[^/.]+$/, "")
-      .replace(/\s+/g, "-");
-    const fileName = `${Date.now()}-${baseName}.webp`;
-    const objectPath = `${userData.public_id}/${fileName}`;
-    const finalName = customName ? customName.trim() : baseName;
+    const randomFileName = generateRandomFileName(req.file.originalname);
+    req.file.originalname = randomFileName;
 
-    const bufferToUpload = await sharp(file.buffer)
-      .webp({ quality: 80 })
-      .toBuffer();
+    const finalName = customName
+      ? customName.trim()
+      : randomFileName.replace(/\.[^/.]+$/, "");
 
-    await minioClient.putObject(
-      bucketName,
-      objectPath,
-      bufferToUpload,
-      bufferToUpload.length,
-      { "Content-Type": "image/webp" },
-    );
+    const publicUrl = await uploadAssetToR2({
+      file: req.file,
+      folderName: userData.public_id,
+    });
+
+    if (!publicUrl) throw new Error("Failed to upload to R2");
 
     const { data: savedMediaData, error: mediaError } = await insertSilaneMedia(
       "images",
       {
         name: finalName,
         user_id: userId,
-        link: objectPath,
+        link: publicUrl,
       },
     );
 
     if (mediaError) throw mediaError;
 
     const currentFiles = userData.images || [];
+    
+    // 🔥 Simpan tagsArray ke dalam struktur JSON images milik user
     currentFiles.push({
       id: savedMediaData.uuid,
       name: savedMediaData.name,
+      tags: tagsArray 
     });
 
     await updateHeraldSilaneByUserId(userId, { images: currentFiles });
 
     res.status(200).json({
       message: "Image uploaded successfully",
-      file: savedMediaData,
+      file: {
+        ...savedMediaData,
+        tags: tagsArray
+      },
     });
   } catch (error) {
     console.error(error);
@@ -104,6 +128,25 @@ export const deleteMedia = async (req, res) => {
         .json({ message: "Invalid data or type is not images" });
     }
 
+    const { data: mediaRecords, error: mediaErr } = await getSilaneMediaByIds(
+      type,
+      ids,
+    );
+    if (mediaErr) throw mediaErr;
+
+    if (mediaRecords && mediaRecords.length > 0) {
+      await Promise.all(
+        mediaRecords.map(async (record) => {
+          if (record.link) {
+            await deleteAssetFromR2(record.link);
+          }
+        }),
+      );
+    }
+
+    const { error: deleteDbErr } = await deleteSilaneMediaByIds(type, ids);
+    if (deleteDbErr) throw deleteDbErr;
+
     const { data: userData, error: fetchError } =
       await getHeraldSilaneByUserId(userId);
     if (fetchError) throw fetchError;
@@ -113,9 +156,9 @@ export const deleteMedia = async (req, res) => {
 
     await updateHeraldSilaneByUserId(userId, { images: updatedFiles });
 
-    res
-      .status(200)
-      .json({ message: `Successfully deleted ${ids.length} item(s)` });
+    res.status(200).json({
+      message: `Successfully deleted ${ids.length} item(s) and cleaned up R2 storage`,
+    });
   } catch (error) {
     console.error(error);
     res
@@ -143,30 +186,15 @@ export const uploadVisageImage = async (req, res) => {
         .json({ message: "Silane profile data not found." });
     }
 
-    // Generate Nama File: Tanggal-Random (Tanpa tulisan 'visage-')
-    const file = req.file;
-    const dateStr = Date.now();
-    const randomStr = Math.random().toString(36).substring(2, 8);
-    const fileName = `${dateStr}-${randomStr}.webp`;
+    req.file.originalname = generateRandomFileName(req.file.originalname);
 
-    // Path di dalam bucket (Folder User ID / Nama File)
-    const objectPath = `${userData.public_id}/${fileName}`;
+    const fullUrl = await uploadAssetToR2({
+      file: req.file,
+      folderName: userData.public_id,
+    });
 
-    const bufferToUpload = await sharp(file.buffer)
-      .webp({ quality: 80 })
-      .toBuffer();
+    if (!fullUrl) throw new Error("Failed to upload to R2");
 
-    await minioClient.putObject(
-      process.env.MINIO_BUCKET_NAME,
-      objectPath,
-      bufferToUpload,
-      bufferToUpload.length,
-      { "Content-Type": "image/webp" },
-    );
-
-    const fullUrl = `https://${process.env.MINIO_ENDPOINT}/${process.env.MINIO_BUCKET_NAME}/${objectPath}`;
-
-    // Kembalikan Full URL ke frontend
     res.status(200).json({
       message: "Visage image uploaded successfully",
       url: fullUrl,
@@ -196,11 +224,10 @@ export const updateVisageData = async (req, res) => {
     const folders = items.filter((item) => item.type === "folder");
     const profiles = items.filter((item) => item.type === "profile");
 
-    // 1. Siapkan data MINIMAL untuk herald_silane (id, nama, image, parentId, type)
     const minimalProfiles = profiles.map((p) => ({
       id: p.id,
       type: "profile",
-      parentId: p.parentId, // Wajib agar hirarki folder di frontend tidak rusak
+      parentId: p.parentId,
       name: p.name,
       tokenUrl: p.tokenUrl,
       portraitUrl: p.portraitUrl,
@@ -210,7 +237,7 @@ export const updateVisageData = async (req, res) => {
 
     const visageProfilesToUpsert = profiles.map((p) => ({
       id: p.id,
-      user_id: userId, // <--- TAMBAHKAN INI
+      user_id: userId,
       folder_id: p.parentId,
       name: p.name,
       potrait_art: p.portraitUrl,
@@ -235,22 +262,20 @@ export const updateVisageData = async (req, res) => {
       if (upsertError) throw upsertError;
     }
 
-
     const activeProfileIds = profiles.map((p) => p.id);
 
     const { error: cleanupError } = await deleteOrphanedVisageProfiles(
       userId,
       activeProfileIds,
     );
-    if (cleanupError)
-      console.error("Gagal membersihkan data yatim:", cleanupError);
+    if (cleanupError) console.error(cleanupError);
 
     res.status(200).json({
       message: "Visage data successfully updated and synced",
       data: updatedData.visage,
     });
   } catch (error) {
-    console.error("Error updating visage data:", error);
+    console.error(error);
     res.status(500).json({
       message: "Failed to update visage data",
       error: error.message,
@@ -274,7 +299,19 @@ export const getDataSilane = async (req, res) => {
       throw error;
     }
 
-    // Blok Proses URL Images Minio ...
+    let domain = process.env.SILANE_PUBLIC_DOMAIN || "";
+    domain = domain.replace(/^https?:\/\//, "").replace(/\/$/, "");
+
+    const formatUrl = (link) => {
+      if (!link) return null;
+      if (link.startsWith("http")) return link;
+      let path = link.replace(/^\//, "");
+      if (domain && path.startsWith(domain)) {
+        return `https://${path}`;
+      }
+      return `https://${domain}/${path}`;
+    };
+
     if (data.images && data.images.length > 0) {
       const imageIds = data.images.map((img) => img.id);
       const { data: mediaRecords, error: mediaErr } = await getSilaneMediaByIds(
@@ -284,19 +321,9 @@ export const getDataSilane = async (req, res) => {
 
       if (!mediaErr && mediaRecords) {
         const urlMap = {};
-        await Promise.all(
-          mediaRecords.map(async (record) => {
-            try {
-              urlMap[record.uuid] = await minioClient.presignedGetObject(
-                bucketName,
-                record.link,
-                24 * 60 * 60,
-              );
-            } catch (err) {
-              console.error(err);
-            }
-          }),
-        );
+        mediaRecords.forEach((record) => {
+          urlMap[record.uuid] = formatUrl(record.link);
+        });
 
         data.images = data.images.map((img) => ({
           ...img,
@@ -305,7 +332,6 @@ export const getDataSilane = async (req, res) => {
       }
     }
 
-    // BLOK BARU: Gabungkan kembali data profile dari silane_visage
     if (data.visage && data.visage.items) {
       const profileIds = data.visage.items
         .filter((i) => i.type === "profile")
@@ -316,24 +342,34 @@ export const getDataSilane = async (req, res) => {
           await getSilaneVisageByIds(profileIds);
 
         if (!fetchErr && fullProfiles) {
-          // Buat Map agar pencarian lebih cepat (O(1) lookup)
           const profilesMap = {};
           fullProfiles.forEach((p) => {
             profilesMap[p.id] = p;
           });
 
-          // Petakan ulang (Merge) data herald dengan data lengkap silane_visage
           data.visage.items = data.visage.items.map((item) => {
-            if (item.type === "profile" && profilesMap[item.id]) {
+            if (item.type === "profile") {
               const dbProf = profilesMap[item.id];
-              return {
-                ...item, // Ini sudah membawa id, name, type, parentId, tokenUrl, portraitUrl
-                size: dbProf.size || "",
-                hide: dbProf.hidden,
-                width: dbProf.dimensions?.width || "",
-                height: dbProf.dimensions?.height || "",
-                charaacter: dbProf.charaacter || [],
-              };
+              if (dbProf) {
+                return {
+                  ...item,
+                  size: dbProf.size || "",
+                  hide: dbProf.hidden,
+                  width: dbProf.dimensions?.width || "",
+                  height: dbProf.dimensions?.height || "",
+                  charaacter: dbProf.charaacter || [],
+                  tokenUrl: formatUrl(dbProf.token_art || item.tokenUrl),
+                  portraitUrl: formatUrl(
+                    dbProf.potrait_art || item.portraitUrl,
+                  ),
+                };
+              } else {
+                return {
+                  ...item,
+                  tokenUrl: formatUrl(item.tokenUrl),
+                  portraitUrl: formatUrl(item.portraitUrl),
+                };
+              }
             }
             return item;
           });
@@ -358,38 +394,55 @@ export const getStorageUsage = async (req, res) => {
       return res.status(401).json({ message: "Access denied" });
     }
 
-    // 1. Ambil data utama dari herald_silane
-    const { data: userData, error: fetchError } = await getHeraldSilaneByUserId(userId);
+    const { data: userData, error: fetchError } =
+      await getHeraldSilaneByUserId(userId);
 
     if (fetchError || !userData) {
       return res.status(404).json({ message: "Silane Assets data not found" });
     }
 
-    let objectPaths = []; // Array untuk menampung semua path file di MinIO
+    let objectPaths = [];
 
-    // 2. Kumpulkan Path File dari Images
+    let domain = process.env.SILANE_PUBLIC_DOMAIN || "";
+    domain = domain.replace(/^https?:\/\//, "").replace(/\/$/, "");
+
+    const extractKey = (link) => {
+      if (!link) return null;
+      let path = link.replace(/^https?:\/\//, "");
+      if (domain && path.startsWith(domain)) {
+        path = path.substring(domain.length);
+      }
+      return path.replace(/^\//, "");
+    };
+
     if (userData.images && userData.images.length > 0) {
       const imageIds = userData.images.map((img) => img.id);
-      const { data: mediaRecords } = await getSilaneMediaByIds("images", imageIds);
+      const { data: mediaRecords } = await getSilaneMediaByIds(
+        "images",
+        imageIds,
+      );
       if (mediaRecords) {
-        mediaRecords.forEach(record => {
-          if (record.link) objectPaths.push(record.link);
+        mediaRecords.forEach((record) => {
+          const key = extractKey(record.link);
+          if (key) objectPaths.push(key);
         });
       }
     }
 
-    // 3. Kumpulkan Path File dari Audio
     if (userData.audio && userData.audio.length > 0) {
       const audioIds = userData.audio.map((aud) => aud.id);
-      const { data: audioRecords } = await getSilaneMediaByIds("audio", audioIds);
+      const { data: audioRecords } = await getSilaneMediaByIds(
+        "audio",
+        audioIds,
+      );
       if (audioRecords) {
-        audioRecords.forEach(record => {
-          if (record.link) objectPaths.push(record.link);
+        audioRecords.forEach((record) => {
+          const key = extractKey(record.link);
+          if (key) objectPaths.push(key);
         });
       }
     }
 
-    // 4. Kumpulkan Path File dari Visage
     if (userData.visage && userData.visage.items) {
       const profileIds = userData.visage.items
         .filter((i) => i.type === "profile")
@@ -397,42 +450,30 @@ export const getStorageUsage = async (req, res) => {
 
       if (profileIds.length > 0) {
         const { data: fullProfiles } = await getSilaneVisageByIds(profileIds);
-        
         if (fullProfiles) {
-          // Format Prefix URL Minio yang kita buat di uploadVisageImage
-          const minioPrefix = `https://${process.env.MINIO_ENDPOINT}/${process.env.MINIO_BUCKET_NAME}/`;
-          
           fullProfiles.forEach((p) => {
-            // Ekstrak path asli dari Full URL
-            if (p.token_art && p.token_art.startsWith(minioPrefix)) {
-              objectPaths.push(p.token_art.replace(minioPrefix, ""));
-            }
-            if (p.potrait_art && p.potrait_art.startsWith(minioPrefix)) {
-              objectPaths.push(p.potrait_art.replace(minioPrefix, ""));
-            }
+            const tokenKey = extractKey(p.token_art);
+            const portraitKey = extractKey(p.potrait_art);
+            if (tokenKey) objectPaths.push(tokenKey);
+            if (portraitKey) objectPaths.push(portraitKey);
           });
         }
       }
     }
 
-    // 5. Hitung Total Size secara Paralel ke MinIO
     let totalSizeBytes = 0;
-    
-    // Menggunakan Promise.all agar pengecekan ke MinIO berjalan lebih cepat
+
     await Promise.all(
       objectPaths.map(async (path) => {
         try {
-          // statObject mengembalikan info file termasuk ukurannya (size)
-          const stat = await minioClient.statObject(bucketName, path);
-          totalSizeBytes += stat.size;
+          const size = await getFileSizeFromR2(path);
+          totalSizeBytes += size;
         } catch (err) {
-          // Abaikan jika file fisik sudah tidak ada di MinIO agar tidak membuat error aplikasi
-          console.warn(`File not found in MinIO or error accessing: ${path}`);
+          console.warn(`⚠️ Failed to get size for ${path}:`, err.message);
         }
-      })
+      }),
     );
 
-    // 6. Konversi ke Format yang mudah dibaca (Megabytes)
     const totalSizeMB = (totalSizeBytes / (1024 * 1024)).toFixed(2);
 
     res.status(200).json({
@@ -440,15 +481,14 @@ export const getStorageUsage = async (req, res) => {
       data: {
         total_files: objectPaths.length,
         total_bytes: totalSizeBytes,
-        total_mb: parseFloat(totalSizeMB)
-      }
+        total_mb: parseFloat(totalSizeMB),
+      },
     });
-
   } catch (error) {
-    console.error("Error calculating storage usage:", error);
-    res.status(500).json({ 
-      message: "Failed to calculate storage usage", 
-      error: error.message 
+    console.error(error);
+    res.status(500).json({
+      message: "Failed to calculate storage usage",
+      error: error.message,
     });
   }
 };
