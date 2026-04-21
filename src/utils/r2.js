@@ -1,9 +1,8 @@
-// src/utils/r2.js
-import { S3Client, PutObjectCommand, DeleteObjectCommand } from "@aws-sdk/client-s3";
+import { S3Client, PutObjectCommand, DeleteObjectCommand, HeadObjectCommand } from "@aws-sdk/client-s3";
 import { nanoid } from "nanoid";
 import sharp from "sharp";
 import path from "path";
-import { HeadObjectCommand } from "@aws-sdk/client-s3";
+
 const s3Client = new S3Client({
   region: "auto",
   endpoint: `https://${process.env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`,
@@ -20,13 +19,20 @@ export async function uploadAssetToR2({ file, folderName }) {
     if (!file || !file.buffer) return null;
 
     try {
+        const MAX_SIZE = 3 * 1024 * 1024;
+        const currentSize = file.size || file.buffer.length;
+
+        if (currentSize > MAX_SIZE) {
+            console.warn(`⚠️ Upload ditolak: Ukuran file (${(currentSize / 1024 / 1024).toFixed(2)} MB) melebihi batas 3MB.`);
+            return null;
+        }
+
         const isImage = file.mimetype.startsWith("image/");
         const uniqueId = nanoid(10);
         let fileBuffer = file.buffer;
         let filename;
         let contentType;
 
-        // Jika gambar, konversi ke WebP untuk optimasi
         if (isImage) {
              filename = `${uniqueId}.webp`;
              contentType = "image/webp";
@@ -47,7 +53,6 @@ export async function uploadAssetToR2({ file, folderName }) {
 
         await s3Client.send(command);
         
-        // Return full public URL
         const cleanDomain = SILANE_DOMAIN.replace(/\/$/, ""); 
         return `${cleanDomain}/${key}`;
     } catch (err) {
