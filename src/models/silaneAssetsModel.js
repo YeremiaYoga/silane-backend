@@ -103,3 +103,36 @@ export const deleteSilaneMediaByIds = async (type, ids) => {
   const tableName = type === "images" ? "silane_image" : `silane_${type}`;
   return await supabase.from(tableName).delete().in("uuid", ids);
 };
+
+
+// ==========================================
+// CHARACTER MODELS
+// ==========================================
+
+export const upsertSilaneCharacter = async (profilesData) => {
+  if (!profilesData || profilesData.length === 0) return { data: [] };
+  return await supabase
+    .from("silane_characters")
+    .upsert(profilesData, { onConflict: "id" })
+    .select();
+};
+
+export const getSilaneCharacterByIds = async (ids) => {
+  if (!ids || ids.length === 0) return { data: [] };
+  return await supabase.from("silane_characters").select("*").in("id", ids);
+};
+
+export const deleteOrphanedCharacterProfiles = async (
+  userId,
+  activeProfileIds,
+) => {
+  if (!activeProfileIds || activeProfileIds.length === 0) {
+    return await supabase.from("silane_characters").delete().eq("user_id", userId);
+  }
+
+  return await supabase
+    .from("silane_characters")
+    .delete()
+    .eq("user_id", userId)
+    .not("id", "in", `(${activeProfileIds.join(",")})`);
+};

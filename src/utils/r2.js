@@ -1,4 +1,9 @@
-import { S3Client, PutObjectCommand, DeleteObjectCommand, HeadObjectCommand } from "@aws-sdk/client-s3";
+import {
+  S3Client,
+  PutObjectCommand,
+  DeleteObjectCommand,
+  HeadObjectCommand,
+} from "@aws-sdk/client-s3";
 import { nanoid } from "nanoid";
 import sharp from "sharp";
 import path from "path";
@@ -16,49 +21,48 @@ const SILANE_BUCKET = process.env.SILANE_BUCKET_NAME;
 const SILANE_DOMAIN = process.env.SILANE_PUBLIC_DOMAIN;
 
 export async function uploadAssetToR2({ file, folderName }) {
-    if (!file || !file.buffer) return null;
+  if (!file || !file.buffer) return null;
 
-    try {
-        const MAX_SIZE = 3 * 1024 * 1024;
-        const currentSize = file.size || file.buffer.length;
+  const MAX_SIZE = 3 * 1024 * 1024;
+  const currentSize = file.size || file.buffer.length;
+  if (currentSize > MAX_SIZE) {
+    console.warn("⚠️ Failed because image file is over 3mb");
+    throw new Error("Failed because image file is over 3mb");
+    return null;
+  }
+  try {
+    const isImage = file.mimetype.startsWith("image/");
+    const uniqueId = nanoid(10);
+    let fileBuffer = file.buffer;
+    let filename;
+    let contentType;
 
-        if (currentSize > MAX_SIZE) {
-            console.warn(`⚠️ Upload ditolak: Ukuran file (${(currentSize / 1024 / 1024).toFixed(2)} MB) melebihi batas 3MB.`);
-            return null;
-        }
-
-        const isImage = file.mimetype.startsWith("image/");
-        const uniqueId = nanoid(10);
-        let fileBuffer = file.buffer;
-        let filename;
-        let contentType;
-
-        if (isImage) {
-             filename = `${uniqueId}.webp`;
-             contentType = "image/webp";
-             fileBuffer = await sharp(file.buffer).webp({ quality: 80 }).toBuffer();
-        } else {
-             const ext = path.extname(file.originalname);
-             filename = `${uniqueId}${ext}`;
-             contentType = file.mimetype;
-        }
-        
-        const key = `${folderName}/${filename}`;
-        const command = new PutObjectCommand({
-             Bucket: SILANE_BUCKET,
-             Key: key,
-             Body: fileBuffer,
-             ContentType: contentType,
-        });
-
-        await s3Client.send(command);
-        
-        const cleanDomain = SILANE_DOMAIN.replace(/\/$/, ""); 
-        return `${cleanDomain}/${key}`;
-    } catch (err) {
-        console.error(`💥 R2 Upload Error:`, err);
-        return null;
+    if (isImage) {
+      filename = `${uniqueId}.webp`;
+      contentType = "image/webp";
+      fileBuffer = await sharp(file.buffer).webp({ quality: 80 }).toBuffer();
+    } else {
+      const ext = path.extname(file.originalname);
+      filename = `${uniqueId}${ext}`;
+      contentType = file.mimetype;
     }
+
+    const key = `${folderName}/${filename}`;
+    const command = new PutObjectCommand({
+      Bucket: SILANE_BUCKET,
+      Key: key,
+      Body: fileBuffer,
+      ContentType: contentType,
+    });
+
+    await s3Client.send(command);
+
+    const cleanDomain = SILANE_DOMAIN.replace(/\/$/, "");
+    return `${cleanDomain}/${key}`;
+  } catch (err) {
+    console.error(`💥 R2 Upload Error:`, err);
+    return null;
+  }
 }
 
 export async function deleteAssetFromR2(fileUrl) {
@@ -67,10 +71,10 @@ export async function deleteAssetFromR2(fileUrl) {
   try {
     let key;
     if (fileUrl.startsWith("http")) {
-        const urlObj = new URL(fileUrl);
-        key = urlObj.pathname;
+      const urlObj = new URL(fileUrl);
+      key = urlObj.pathname;
     } else {
-        key = fileUrl;
+      key = fileUrl;
     }
 
     if (key.startsWith("/")) key = key.substring(1);

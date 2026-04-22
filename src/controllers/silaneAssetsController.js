@@ -14,6 +14,9 @@ import {
   getSilaneVisageByIds,
   deleteOrphanedVisageProfiles,
   deleteSilaneMediaByIds,
+  upsertSilaneCharacter,
+  getSilaneCharacterByIds,
+  deleteOrphanedCharacterProfiles,
 } from "../models/silaneAssetsModel.js";
 
 const generateRandomFileName = (originalName) => {
@@ -34,8 +37,7 @@ export const uploadMedia = async (req, res) => {
     const userId = req.user?.id || req.body.user_id;
     const type = req.body.type;
     const customName = req.body.customName;
-    
-    // 🔥 Tangkap data tags (dikirim sebagai JSON string dari frontend)
+
     let tagsArray = [];
     if (req.body.tags) {
       try {
@@ -70,12 +72,17 @@ export const uploadMedia = async (req, res) => {
       ? customName.trim()
       : randomFileName.replace(/\.[^/.]+$/, "");
 
-    const publicUrl = await uploadAssetToR2({
-      file: req.file,
-      folderName: userData.public_id,
-    });
-
-    if (!publicUrl) throw new Error("Failed to upload to R2");
+    let publicUrl;
+    try {
+      publicUrl = await uploadAssetToR2({
+        file: req.file,
+        folderName: userData.public_id,
+      });
+    } catch (uploadErr) {
+      return res
+        .status(400)
+        .json({ message: uploadErr.message || "Upload failed." });
+    }
 
     const { data: savedMediaData, error: mediaError } = await insertSilaneMedia(
       "images",
@@ -89,12 +96,11 @@ export const uploadMedia = async (req, res) => {
     if (mediaError) throw mediaError;
 
     const currentFiles = userData.images || [];
-    
-    // 🔥 Simpan tagsArray ke dalam struktur JSON images milik user
+
     currentFiles.push({
       id: savedMediaData.uuid,
       name: savedMediaData.name,
-      tags: tagsArray 
+      tags: tagsArray,
     });
 
     await updateHeraldSilaneByUserId(userId, { images: currentFiles });
@@ -103,14 +109,14 @@ export const uploadMedia = async (req, res) => {
       message: "Image uploaded successfully",
       file: {
         ...savedMediaData,
-        tags: tagsArray
+        tags: tagsArray,
       },
     });
   } catch (error) {
     console.error(error);
-    res
-      .status(500)
-      .json({ message: "Failed to upload media", error: error.message });
+    res.status(400).json({
+      message: error.message || "Failed to upload media",
+    });
   }
 };
 
@@ -188,12 +194,17 @@ export const uploadVisageImage = async (req, res) => {
 
     req.file.originalname = generateRandomFileName(req.file.originalname);
 
-    const fullUrl = await uploadAssetToR2({
-      file: req.file,
-      folderName: userData.public_id,
-    });
-
-    if (!fullUrl) throw new Error("Failed to upload to R2");
+    let fullUrl;
+    try {
+      fullUrl = await uploadAssetToR2({
+        file: req.file,
+        folderName: userData.public_id,
+      });
+    } catch (uploadErr) {
+      return res
+        .status(400)
+        .json({ message: uploadErr.message || "Upload failed." });
+    }
 
     res.status(200).json({
       message: "Visage image uploaded successfully",
@@ -201,9 +212,9 @@ export const uploadVisageImage = async (req, res) => {
     });
   } catch (error) {
     console.error(error);
-    res
-      .status(500)
-      .json({ message: "Failed to upload visage image", error: error.message });
+    res.status(400).json({
+      message: error.message || "Failed to upload visage image",
+    });
   }
 };
 
@@ -276,8 +287,91 @@ export const updateVisageData = async (req, res) => {
     });
   } catch (error) {
     console.error(error);
+    res.status(400).json({
+      message: error.message || "Failed to upload media",
+    });
+  }
+};
+
+export const updateCharacterData = async (req, res) => {
+  try {
+    const userId = req.user?.id;
+    const { character } = req.body;
+
+    if (!userId) {
+      return res.status(401).json({ message: "Access denied" });
+    }
+
+    if (!character || !character.items) {
+      return res.status(400).json({ message: "No character data provided" });
+    }
+
+    const items = character.items;
+    const folders = items.filter((item) => item.type === "folder");
+    const profiles = items.filter((item) => item.type === "character");
+
+    // Format minimal untuk disimpan di JSON tree herald_silane (kolom character)
+    const minimalProfiles = profiles.map((p) => ({
+      id: p.id,
+      type: "character",
+      parentId: p.parentId,
+      name: p.name,
+    }));
+
+    const heraldCharacter = { items: [...folders, ...minimalProfiles] };
+
+    // Format lengkap untuk di-upsert ke silane_characters
+    const characterProfilesToUpsert = profiles.map((p) => {
+      const fvtt = p.fvtt_data || {};
+      const stats = fvtt._stats || {};
+
+      const mergedMetadata = {
+        ...(p.metadata || {}),
+        system: stats.systemId || fvtt.system?.id || null,
+        core_version: stats.coreVersion || null,
+      };
+
+      const tokenImage = fvtt.img || null;
+
+      return {
+        id: p.id,
+        user_id: userId,
+        folder_id: p.parentId,
+        name: p.name,
+        token_image: tokenImage,
+        export_time: p.export_time || null,
+        world_id: p.world_id || null,
+        fvtt_data: fvtt,
+        metadata: mergedMetadata,
+      };
+    });
+
+    const updatedData = await updateHeraldSilaneByUserId(userId, {
+      character: heraldCharacter,
+    });
+
+    if (characterProfilesToUpsert.length > 0) {
+      const { error: upsertError } = await upsertSilaneCharacter(
+        characterProfilesToUpsert,
+      );
+      if (upsertError) throw upsertError;
+    }
+
+    const activeProfileIds = profiles.map((p) => p.id);
+    const { error: cleanupError } = await deleteOrphanedCharacterProfiles(
+      userId,
+      activeProfileIds,
+    );
+    if (cleanupError) console.error(cleanupError);
+
+    res.status(200).json({
+      message: "Character data successfully updated and synced",
+      data: updatedData.character,
+    });
+  } catch (error) {
+    console.error(error);
     res.status(500).json({
-      message: "Failed to update visage data",
+      message: "Failed to update character data",
       error: error.message,
     });
   }
@@ -368,6 +462,42 @@ export const getDataSilane = async (req, res) => {
                   ...item,
                   tokenUrl: formatUrl(item.tokenUrl),
                   portraitUrl: formatUrl(item.portraitUrl),
+                };
+              }
+            }
+            return item;
+          });
+        }
+      }
+    }
+
+    // Menggabungkan data JSON detail Character dari tabel silane_characters
+    if (data.character && data.character.items) {
+      const charProfileIds = data.character.items
+        .filter((i) => i.type === "character")
+        .map((i) => i.id);
+
+      if (charProfileIds.length > 0) {
+        const { data: fullChars, error: fetchCharErr } =
+          await getSilaneCharacterByIds(charProfileIds);
+
+        if (!fetchCharErr && fullChars) {
+          const charMap = {};
+          fullChars.forEach((c) => {
+            charMap[c.id] = c;
+          });
+
+          data.character.items = data.character.items.map((item) => {
+            if (item.type === "character") {
+              const dbChar = charMap[item.id];
+              if (dbChar) {
+                return {
+                  ...item,
+                  tokenUrl: formatUrl(dbChar.token_image),
+                  fvtt_data: dbChar.fvtt_data,
+                  export_time: dbChar.export_time,
+                  world_id: dbChar.world_id,
+                  metadata: dbChar.metadata,
                 };
               }
             }
