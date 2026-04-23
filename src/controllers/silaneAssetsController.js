@@ -310,7 +310,7 @@ export const updateCharacterData = async (req, res) => {
     const folders = items.filter((item) => item.type === "folder");
     const profiles = items.filter((item) => item.type === "character");
 
-    // Format minimal untuk disimpan di JSON tree herald_silane (kolom character)
+    // Format minimal untuk disimpan di JSON tree herald_silane
     const minimalProfiles = profiles.map((p) => ({
       id: p.id,
       type: "character",
@@ -320,17 +320,31 @@ export const updateCharacterData = async (req, res) => {
 
     const heraldCharacter = { items: [...folders, ...minimalProfiles] };
 
-    const characterProfilesToUpsert = profiles.map((p) => {
+   const characterProfilesToUpsert = profiles.map((p) => {
       const fvtt = p.fvtt_data || {};
+      
+      // Pastikan nama di dalam JSON di-override oleh nama dari input user
+      fvtt.name = p.name;
+      
       const stats = fvtt._stats || {};
+      const exportSource = stats.exportSource || {};
 
+      // 1. Ekstrak Metadata (System & Core) dari JSON
       const mergedMetadata = {
         ...(p.metadata || {}),
-        system: stats.systemId || fvtt.system?.id || null,
-        core_version: stats.coreVersion || null,
+        system:
+          stats.systemId || exportSource.systemId || fvtt.system?.id || null,
+        systemVersion:
+          stats.systemVersion || exportSource.systemVersion || null,
+        core_version: stats.coreVersion || exportSource.coreVersion || null,
       };
 
-      const tokenImage = fvtt.img || null;
+      // 2. Ekstrak Token Image
+      const tokenImage = fvtt.img || fvtt.prototypeToken?.texture?.src || null;
+      const worldId = exportSource.worldId || null;
+
+      // 🔥 3. EXPORT TIME MENGGUNAKAN WAKTU SAAT INI (WAKTU UPLOAD)
+      const exportTime = new Date().toISOString(); 
 
       return {
         id: p.id,
@@ -338,8 +352,8 @@ export const updateCharacterData = async (req, res) => {
         folder_id: p.parentId,
         name: p.name,
         token_image: tokenImage,
-        export_time: p.export_time || null,
-        world_id: p.world_id || null,
+        export_time: exportTime, // <-- Menyimpan waktu saat file ini diunggah ke DB
+        world_id: worldId,
         fvtt_data: fvtt,
         metadata: mergedMetadata,
       };
@@ -491,7 +505,7 @@ export const getDataSilane = async (req, res) => {
               if (dbChar) {
                 return {
                   ...item,
-                  tokenUrl: formatUrl(dbChar.token_image),
+                  tokenUrl: dbChar.token_image,
                   fvtt_data: dbChar.fvtt_data,
                   export_time: dbChar.export_time,
                   world_id: dbChar.world_id,
@@ -530,6 +544,7 @@ export const getStorageUsage = async (req, res) => {
     }
 
     let objectPaths = [];
+    let totalSizeBytes = 0;
 
     let domain = process.env.SILANE_PUBLIC_DOMAIN || "";
     domain = domain.replace(/^https?:\/\//, "").replace(/\/$/, "");
@@ -589,7 +604,32 @@ export const getStorageUsage = async (req, res) => {
       }
     }
 
-    let totalSizeBytes = 0;
+    if (userData.character && userData.character.items) {
+      const charProfileIds = userData.character.items
+        .filter((i) => i.type === "character")
+        .map((i) => i.id);
+
+      if (charProfileIds.length > 0) {
+        const { data: fullChars } =
+          await getSilaneCharacterByIds(charProfileIds);
+        if (fullChars) {
+          fullChars.forEach((c) => {
+            if (c.metadata) {
+              totalSizeBytes += Buffer.byteLength(
+                JSON.stringify(c.metadata),
+                "utf8",
+              );
+            }
+            if (c.fvtt_data) {
+              totalSizeBytes += Buffer.byteLength(
+                JSON.stringify(c.fvtt_data),
+                "utf8",
+              );
+            }
+          });
+        }
+      }
+    }
 
     await Promise.all(
       objectPaths.map(async (path) => {
