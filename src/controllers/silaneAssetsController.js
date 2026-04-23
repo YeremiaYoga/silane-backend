@@ -320,7 +320,6 @@ export const updateCharacterData = async (req, res) => {
 
     const heraldCharacter = { items: [...folders, ...minimalProfiles] };
 
-    // Format lengkap untuk di-upsert ke silane_characters
     const characterProfilesToUpsert = profiles.map((p) => {
       const fvtt = p.fvtt_data || {};
       const stats = fvtt._stats || {};
@@ -471,7 +470,6 @@ export const getDataSilane = async (req, res) => {
       }
     }
 
-    // Menggabungkan data JSON detail Character dari tabel silane_characters
     if (data.character && data.character.items) {
       const charProfileIds = data.character.items
         .filter((i) => i.type === "character")

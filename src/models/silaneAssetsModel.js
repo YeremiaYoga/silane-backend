@@ -87,11 +87,10 @@ export const deleteOrphanedVisageProfiles = async (
   activeProfileIds,
 ) => {
   if (!activeProfileIds || activeProfileIds.length === 0) {
-    // Jika user menghapus SEMUA profilnya, hapus semua dari database
+
     return await supabase.from("silane_visage").delete().eq("user_id", userId);
   }
 
-  // Hapus profil milik user ini yang ID-nya TIDAK ADA di dalam array activeProfileIds
   return await supabase
     .from("silane_visage")
     .delete()
