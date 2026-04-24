@@ -320,12 +320,12 @@ export const updateCharacterData = async (req, res) => {
 
     const heraldCharacter = { items: [...folders, ...minimalProfiles] };
 
-   const characterProfilesToUpsert = profiles.map((p) => {
+    const characterProfilesToUpsert = profiles.map((p) => {
       const fvtt = p.fvtt_data || {};
-      
+
       // Pastikan nama di dalam JSON di-override oleh nama dari input user
       fvtt.name = p.name;
-      
+
       const stats = fvtt._stats || {};
       const exportSource = stats.exportSource || {};
 
@@ -339,12 +339,17 @@ export const updateCharacterData = async (req, res) => {
         core_version: stats.coreVersion || exportSource.coreVersion || null,
       };
 
-      // 2. Ekstrak Token Image
-      const tokenImage = fvtt.img || fvtt.prototypeToken?.texture?.src || null;
-      const worldId = exportSource.worldId || null;
+      const tokenImage =
+        p.tokenUrl || fvtt.img || fvtt.prototypeToken?.texture?.src || null;
 
-      // 🔥 3. EXPORT TIME MENGGUNAKAN WAKTU SAAT INI (WAKTU UPLOAD)
-      const exportTime = new Date().toISOString(); 
+      const worldId = p.world_id || exportSource.worldId || null;
+
+      let exportTime;
+      if (p.export_time) {
+        exportTime = new Date(p.export_time).toISOString();
+      } else {
+        exportTime = new Date().toISOString();
+      }
 
       return {
         id: p.id,
@@ -352,7 +357,7 @@ export const updateCharacterData = async (req, res) => {
         folder_id: p.parentId,
         name: p.name,
         token_image: tokenImage,
-        export_time: exportTime, // <-- Menyimpan waktu saat file ini diunggah ke DB
+        export_time: exportTime,
         world_id: worldId,
         fvtt_data: fvtt,
         metadata: mergedMetadata,
