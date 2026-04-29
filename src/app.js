@@ -11,23 +11,11 @@ const app = express();
 app.use(cookieParser());
 app.use(express.json());
 
-// app.use(
-//   cors({
-//     origin: [
-//       "http://localhost:30000",
-//       process.env.FOUNDRY_SERVER_ORIGIN_1, 
-//     ],
-//     credentials: true,
-//     methods: ["GET", "POST", "OPTIONS"],
-//     allowedHeaders: ["Content-Type", "Authorization"],
-//     optionsSuccessStatus: 200,
-//   })
-// );
 
 app.use(
   cors({
     origin: true, 
-    credentials: true, 
+    // credentials: true, 
     methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"], 
     allowedHeaders: ["Content-Type", "Authorization"],
   })
