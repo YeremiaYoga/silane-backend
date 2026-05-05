@@ -87,7 +87,6 @@ export const deleteOrphanedVisageProfiles = async (
   activeProfileIds,
 ) => {
   if (!activeProfileIds || activeProfileIds.length === 0) {
-
     return await supabase.from("silane_visage").delete().eq("user_id", userId);
   }
 
@@ -102,7 +101,6 @@ export const deleteSilaneMediaByIds = async (type, ids) => {
   const tableName = type === "images" ? "silane_image" : `silane_${type}`;
   return await supabase.from(tableName).delete().in("uuid", ids);
 };
-
 
 // ==========================================
 // CHARACTER MODELS
@@ -126,7 +124,10 @@ export const deleteOrphanedCharacterProfiles = async (
   activeProfileIds,
 ) => {
   if (!activeProfileIds || activeProfileIds.length === 0) {
-    return await supabase.from("silane_characters").delete().eq("user_id", userId);
+    return await supabase
+      .from("silane_characters")
+      .delete()
+      .eq("user_id", userId);
   }
 
   return await supabase
@@ -134,4 +135,47 @@ export const deleteOrphanedCharacterProfiles = async (
     .delete()
     .eq("user_id", userId)
     .not("id", "in", `(${activeProfileIds.join(",")})`);
+};
+
+// ==========================================
+// AUDIO MODELS
+// ==========================================
+
+export const getAllHeraldSilaneAudio = async () => {
+  return await supabase.from("herald_silane").select("user_id, audio");
+};
+
+export const getSilanePlaylistsByAlbumIds = async (albumIds) => {
+  if (!albumIds || albumIds.length === 0) return { data: [] };
+  return await supabase
+    .from("silane_audio")
+    .select("*")
+    .in("album_id", albumIds);
+};
+
+export const upsertSilanePlaylists = async (playlistsData) => {
+  if (!playlistsData || playlistsData.length === 0) return { data: [] };
+  return await supabase
+    .from("silane_audio")
+    .upsert(playlistsData, { onConflict: "uuid" })
+    .select();
+};
+
+export const deleteOrphanedPlaylists = async (
+  activeAlbumIds,
+  activePlaylistUuids,
+) => {
+  if (!activeAlbumIds || activeAlbumIds.length === 0) return { data: [] };
+  if (!activePlaylistUuids || activePlaylistUuids.length === 0) {
+    return await supabase
+      .from("silane_audio")
+      .delete()
+      .in("album_id", activeAlbumIds);
+  }
+
+  return await supabase
+    .from("silane_audio")
+    .delete()
+    .in("album_id", activeAlbumIds)
+    .not("uuid", "in", `(${activePlaylistUuids.join(",")})`);
 };

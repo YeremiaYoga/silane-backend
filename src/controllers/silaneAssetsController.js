@@ -17,6 +17,12 @@ import {
   upsertSilaneCharacter,
   getSilaneCharacterByIds,
   deleteOrphanedCharacterProfiles,
+  getAllHeraldSilanes,
+  getSilanePlaylistsByAlbumIds,
+  upsertSilanePlaylists,
+  deleteOrphanedPlaylists,
+  createHeraldSilane,
+  getAllHeraldSilaneAudio, // 🔥 FIX: IMPORT INI DITAMBAHKAN
 } from "../models/silaneAssetsModel.js";
 
 const generateRandomFileName = (originalName) => {
@@ -28,6 +34,22 @@ const generateRandomFileName = (originalName) => {
   return `${dateStr}-${randomStr}${ext}`;
 };
 
+const generatePublicId = () => crypto.randomBytes(8).toString("hex");
+
+// Helper parsing agar kebal dari error string Supabase
+const safeJsonParse = (data, fallback) => {
+  if (!data) return fallback;
+  if (typeof data === "object") return data;
+  try {
+    return JSON.parse(data);
+  } catch (e) {
+    return fallback;
+  }
+};
+
+// ==========================================
+// MEDIA (IMAGES)
+// ==========================================
 export const uploadMedia = async (req, res) => {
   try {
     if (!req.file) {
@@ -173,6 +195,9 @@ export const deleteMedia = async (req, res) => {
   }
 };
 
+// ==========================================
+// VISAGE
+// ==========================================
 export const uploadVisageImage = async (req, res) => {
   try {
     if (!req.file) {
@@ -288,11 +313,14 @@ export const updateVisageData = async (req, res) => {
   } catch (error) {
     console.error(error);
     res.status(400).json({
-      message: error.message || "Failed to upload media",
+      message: error.message || "Failed to update visage data",
     });
   }
 };
 
+// ==========================================
+// CHARACTER
+// ==========================================
 export const updateCharacterData = async (req, res) => {
   try {
     const userId = req.user?.id;
@@ -310,7 +338,6 @@ export const updateCharacterData = async (req, res) => {
     const folders = items.filter((item) => item.type === "folder");
     const profiles = items.filter((item) => item.type === "character");
 
-    // Format minimal untuk disimpan di JSON tree herald_silane
     const minimalProfiles = profiles.map((p) => ({
       id: p.id,
       type: "character",
@@ -322,14 +349,10 @@ export const updateCharacterData = async (req, res) => {
 
     const characterProfilesToUpsert = profiles.map((p) => {
       const fvtt = p.fvtt_data || {};
-
-      // Pastikan nama di dalam JSON di-override oleh nama dari input user
       fvtt.name = p.name;
-
       const stats = fvtt._stats || {};
       const exportSource = stats.exportSource || {};
 
-      // 1. Ekstrak Metadata (System & Core) dari JSON
       const mergedMetadata = {
         ...(p.metadata || {}),
         system:
@@ -344,12 +367,9 @@ export const updateCharacterData = async (req, res) => {
 
       const worldId = p.world_id || exportSource.worldId || null;
 
-      let exportTime;
-      if (p.export_time) {
-        exportTime = new Date(p.export_time).toISOString();
-      } else {
-        exportTime = new Date().toISOString();
-      }
+      let exportTime = p.export_time
+        ? new Date(p.export_time).toISOString()
+        : new Date().toISOString();
 
       return {
         id: p.id,
@@ -395,13 +415,13 @@ export const updateCharacterData = async (req, res) => {
   }
 };
 
+// ==========================================
+// GET MASTER DATA (INCLUDES AUDIO)
+// ==========================================
 export const getDataSilane = async (req, res) => {
   try {
     const userId = req.user?.id;
-
-    if (!userId) {
-      return res.status(401).json({ message: "Access denied" });
-    }
+    if (!userId) return res.status(401).json({ message: "Access denied" });
 
     const { data, error } = await getHeraldSilaneByUserId(userId);
 
@@ -424,6 +444,7 @@ export const getDataSilane = async (req, res) => {
       return `https://${domain}/${path}`;
     };
 
+    // Images
     if (data.images && data.images.length > 0) {
       const imageIds = data.images.map((img) => img.id);
       const { data: mediaRecords, error: mediaErr } = await getSilaneMediaByIds(
@@ -444,6 +465,7 @@ export const getDataSilane = async (req, res) => {
       }
     }
 
+    // Visage
     if (data.visage && data.visage.items) {
       const profileIds = data.visage.items
         .filter((i) => i.type === "profile")
@@ -489,6 +511,7 @@ export const getDataSilane = async (req, res) => {
       }
     }
 
+    // Character
     if (data.character && data.character.items) {
       const charProfileIds = data.character.items
         .filter((i) => i.type === "character")
@@ -524,15 +547,66 @@ export const getDataSilane = async (req, res) => {
       }
     }
 
+    // 🔥 LOGIKA AUDIO YANG BARU 🔥
+    let audioData = { albums: [], playlists: [] };
+    let allAlbums = [];
+
+    const { data: allProfiles } = await getAllHeraldSilaneAudio();
+
+    if (allProfiles) {
+      allProfiles.forEach((p) => {
+        const pAudio = safeJsonParse(p.audio, {});
+
+        if (pAudio.albums && Array.isArray(pAudio.albums)) {
+          pAudio.albums.forEach((album) => {
+            const isOwner = String(album.user_id) === String(userId);
+            const isMember =
+              album.joined_user &&
+              album.joined_user.some(
+                (u) => String(u.user_id) === String(userId),
+              );
+
+            if (isOwner || isMember) {
+              if (!allAlbums.find((existing) => existing.id === album.id)) {
+                allAlbums.push(album);
+              }
+            }
+          });
+        }
+      });
+    }
+
+    const activeAlbumIds = allAlbums.map((a) => a.id);
+    if (activeAlbumIds.length > 0) {
+      try {
+        const { data: playlists } =
+          await getSilanePlaylistsByAlbumIds(activeAlbumIds);
+        audioData.albums = allAlbums;
+        audioData.playlists = (playlists || []).map((pl) => ({
+          ...pl,
+          track: pl.track || [],
+        }));
+      } catch (err) {
+        console.error("Playlist Fetch Error:", err);
+        audioData.albums = allAlbums;
+      }
+    } else {
+      audioData.albums = allAlbums;
+    }
+
+    data.audio = audioData;
     res.status(200).json({ data });
   } catch (error) {
-    console.error(error);
+    console.error("GET DATA SILANE ERROR:", error);
     res
       .status(500)
       .json({ message: "Failed to fetch Silane data", error: error.message });
   }
 };
 
+// ==========================================
+// STORAGE USAGE
+// ==========================================
 export const getStorageUsage = async (req, res) => {
   try {
     const userId = req.user?.id;
@@ -563,6 +637,7 @@ export const getStorageUsage = async (req, res) => {
       return path.replace(/^\//, "");
     };
 
+    // Images
     if (userData.images && userData.images.length > 0) {
       const imageIds = userData.images.map((img) => img.id);
       const { data: mediaRecords } = await getSilaneMediaByIds(
@@ -577,20 +652,25 @@ export const getStorageUsage = async (req, res) => {
       }
     }
 
-    if (userData.audio && userData.audio.length > 0) {
-      const audioIds = userData.audio.map((aud) => aud.id);
-      const { data: audioRecords } = await getSilaneMediaByIds(
-        "audio",
-        audioIds,
-      );
-      if (audioRecords) {
-        audioRecords.forEach((record) => {
-          const key = extractKey(record.link);
-          if (key) objectPaths.push(key);
+    // Audio Playlists Tracks
+    const myOwnedAlbums = userData.audio?.albums || [];
+    const myOwnedAlbumIds = myOwnedAlbums.map((a) => a.id);
+    if (myOwnedAlbumIds.length > 0) {
+      const { data: audioDataFromDB } =
+        await getSilanePlaylistsByAlbumIds(myOwnedAlbumIds);
+      if (audioDataFromDB) {
+        audioDataFromDB.forEach((pl) => {
+          if (pl.track && Array.isArray(pl.track)) {
+            pl.track.forEach((t) => {
+              const key = extractKey(t.url);
+              if (key) objectPaths.push(key);
+            });
+          }
         });
       }
     }
 
+    // Visage
     if (userData.visage && userData.visage.items) {
       const profileIds = userData.visage.items
         .filter((i) => i.type === "profile")
@@ -609,6 +689,7 @@ export const getStorageUsage = async (req, res) => {
       }
     }
 
+    // Characters JSON
     if (userData.character && userData.character.items) {
       const charProfileIds = userData.character.items
         .filter((i) => i.type === "character")
@@ -636,16 +717,19 @@ export const getStorageUsage = async (req, res) => {
       }
     }
 
-    await Promise.all(
-      objectPaths.map(async (path) => {
-        try {
-          const size = await getFileSizeFromR2(path);
-          totalSizeBytes += size;
-        } catch (err) {
-          console.warn(`⚠️ Failed to get size for ${path}:`, err.message);
-        }
-      }),
-    );
+    // Fetch Sizes from R2
+    if (typeof getFileSizeFromR2 === "function") {
+      await Promise.all(
+        objectPaths.map(async (path) => {
+          try {
+            const size = await getFileSizeFromR2(path);
+            totalSizeBytes += size;
+          } catch (err) {
+            console.warn(`⚠️ Failed to get size for ${path}:`, err.message);
+          }
+        }),
+      );
+    }
 
     const totalSizeMB = (totalSizeBytes / (1024 * 1024)).toFixed(2);
 
@@ -663,5 +747,237 @@ export const getStorageUsage = async (req, res) => {
       message: "Failed to calculate storage usage",
       error: error.message,
     });
+  }
+};
+
+// ==========================================
+// AUDIO ACTIONS
+// ==========================================
+export const uploadAudioTrack = async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ message: "No file uploaded." });
+    }
+
+    const userId = req.user?.id || req.body.user_id;
+    if (!userId) {
+      return res.status(401).json({ message: "Access denied." });
+    }
+
+    let { data: userData, error: fetchError } =
+      await getHeraldSilaneByUserId(userId);
+    if (fetchError || !userData?.public_id) {
+      return res
+        .status(404)
+        .json({ message: "Silane profile data not found." });
+    }
+
+    req.file.originalname = generateRandomFileName(req.file.originalname);
+
+    let fullUrl;
+    try {
+      fullUrl = await uploadAssetToR2({
+        file: req.file,
+        folderName: userData.public_id,
+      });
+    } catch (uploadErr) {
+      return res
+        .status(400)
+        .json({ message: uploadErr.message || "Upload failed." });
+    }
+
+    let domain = process.env.SILANE_PUBLIC_DOMAIN || "";
+    domain = domain.replace(/^https?:\/\//, "").replace(/\/$/, "");
+    const formattedUrl = `https://${domain}/${fullUrl}`;
+
+    res.status(200).json({
+      success: true,
+      message: "Audio uploaded successfully",
+      url: formattedUrl,
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({
+      message: error.message || "Failed to upload audio",
+    });
+  }
+};
+
+export const updateAudioAlbum = async (req, res) => {
+  try {
+    const userId = req.user?.id || req.userId;
+    const { albums } = req.body;
+
+    if (!userId)
+      return res.status(401).json({ success: false, error: "Access denied" });
+    if (!albums || !Array.isArray(albums))
+      return res
+        .status(400)
+        .json({ success: false, error: "Invalid albums data" });
+
+    let { data: myProfile, error: fetchErr } =
+      await getHeraldSilaneByUserId(userId);
+
+    if (!myProfile || (fetchErr && fetchErr.code === "PGRST116")) {
+      const newSilanePayload = {
+        user_id: userId,
+        username: req.user?.username || "Unknown",
+        public_id: generatePublicId(),
+        character: { items: [] },
+        visage: { items: [] },
+        images: [],
+        audio: { albums: [], joined_albums: [] },
+      };
+      const { data: createdSilane, error: createErr } =
+        await createHeraldSilane(newSilanePayload);
+      if (createErr) throw createErr;
+      myProfile = createdSilane;
+    }
+
+    const existingAudio = myProfile?.audio || { albums: [], joined_albums: [] };
+
+    const myOwnedAlbums = albums.map((a) => {
+      return {
+        ...a,
+        user_id: userId,
+        joined_user:
+          a.joined_user?.length > 0
+            ? a.joined_user
+            : [{ user_id: userId, user_name: req.user?.username || "Owner" }],
+      };
+    });
+
+    const updatedAudio = { ...existingAudio, albums: myOwnedAlbums };
+
+    const { error: heraldErr } = await updateHeraldSilaneByUserId(userId, {
+      audio: updatedAudio,
+    });
+    if (heraldErr) throw heraldErr;
+
+    res.status(200).json({
+      success: true,
+      message: "Albums successfully updated in herald_silane",
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+};
+
+export const updateAudioPlaylist = async (req, res) => {
+  try {
+    const userId = req.user?.id || req.userId;
+    const { playlists, activeAlbumIds } = req.body;
+
+    if (!userId)
+      return res.status(401).json({ success: false, error: "Access denied" });
+    if (!playlists || !Array.isArray(playlists))
+      return res
+        .status(400)
+        .json({ success: false, error: "Invalid playlists data" });
+
+    const playlistsToUpsert = playlists.map((p) => {
+      const cleanTracks = (p.track || []).map((t) => ({
+        ...t,
+        user_id: t.user_id === "unknown" || !t.user_id ? userId : t.user_id,
+        user_name:
+          t.user_name === "Unknown" || !t.user_name
+            ? req.user?.username || "Unknown"
+            : t.user_name,
+      }));
+
+      const validUuid = p.uuid || p.id || crypto.randomUUID();
+
+      return {
+        uuid: validUuid,
+        user_id: userId,
+        user_name: p.user_name || req.user?.username || "Unknown",
+        album_id: p.album_id,
+        name: p.name,
+        track: cleanTracks,
+      };
+    });
+
+    if (playlistsToUpsert.length > 0) {
+      const { error: upsertErr } =
+        await upsertSilanePlaylists(playlistsToUpsert);
+      if (upsertErr) throw upsertErr;
+    }
+
+    if (activeAlbumIds && Array.isArray(activeAlbumIds)) {
+      const activePlaylistUuids = playlistsToUpsert.map((p) => p.uuid || p.id);
+      await deleteOrphanedPlaylists(activeAlbumIds, activePlaylistUuids);
+    }
+
+    res.status(200).json({
+      success: true,
+      message: "Playlists successfully updated in silane_audio",
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+};
+
+export const joinAudioAlbum = async (req, res) => {
+  try {
+    const userId = req.user?.id || req.userId;
+    const userName = req.user?.username || "Unknown";
+    const { invite_code } = req.body;
+
+    if (!invite_code)
+      return res
+        .status(400)
+        .json({ success: false, message: "Invite code required" });
+
+    const { data: allProfiles } = await getAllHeraldSilaneAudio();
+    let targetAlbum = null;
+    let targetOwnerId = null;
+    let targetAudioData = null;
+
+    if (allProfiles) {
+      for (const profile of allProfiles) {
+        const pAudio = safeJsonParse(profile.audio, {});
+        if (pAudio.albums) {
+          const found = pAudio.albums.find(
+            (a) => a.invite_code === invite_code,
+          );
+          if (found) {
+            targetAlbum = found;
+            targetOwnerId = profile.user_id;
+            targetAudioData = pAudio;
+            break;
+          }
+        }
+      }
+    }
+
+    if (!targetAlbum)
+      return res
+        .status(404)
+        .json({ success: false, message: "Album not found or invalid code." });
+
+    if (String(targetOwnerId) === String(userId)) {
+      return res
+        .status(400)
+        .json({ success: false, message: "You cannot join your own album." });
+    }
+
+    if (!targetAlbum.joined_user) targetAlbum.joined_user = [];
+    const alreadyJoined = targetAlbum.joined_user.find(
+      (u) => String(u.user_id) === String(userId),
+    );
+
+    if (!alreadyJoined) {
+      targetAlbum.joined_user.push({ user_id: userId, user_name: userName });
+      await updateHeraldSilaneByUserId(targetOwnerId, {
+        audio: targetAudioData,
+      });
+    }
+
+    res
+      .status(200)
+      .json({ success: true, message: "Joined album successfully" });
+  } catch (error) {
+    console.error("JOIN ALBUM ERROR:", error);
+    res.status(500).json({ success: false, error: error.message });
   }
 };
