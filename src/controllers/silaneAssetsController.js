@@ -22,7 +22,7 @@ import {
   upsertSilanePlaylists,
   deleteOrphanedPlaylists,
   createHeraldSilane,
-  getAllHeraldSilaneAudio, // 🔥 FIX: IMPORT INI DITAMBAHKAN
+  getAllHeraldSilaneAudio, 
 } from "../models/silaneAssetsModel.js";
 
 const generateRandomFileName = (originalName) => {
@@ -36,7 +36,7 @@ const generateRandomFileName = (originalName) => {
 
 const generatePublicId = () => crypto.randomBytes(8).toString("hex");
 
-// Helper parsing agar kebal dari error string Supabase
+
 const safeJsonParse = (data, fallback) => {
   if (!data) return fallback;
   if (typeof data === "object") return data;
@@ -465,7 +465,6 @@ export const getDataSilane = async (req, res) => {
       }
     }
 
-    // Visage
     if (data.visage && data.visage.items) {
       const profileIds = data.visage.items
         .filter((i) => i.type === "profile")
@@ -511,7 +510,7 @@ export const getDataSilane = async (req, res) => {
       }
     }
 
-    // Character
+
     if (data.character && data.character.items) {
       const charProfileIds = data.character.items
         .filter((i) => i.type === "character")
@@ -547,7 +546,7 @@ export const getDataSilane = async (req, res) => {
       }
     }
 
-    // 🔥 LOGIKA AUDIO YANG BARU 🔥
+
     let audioData = { albums: [], playlists: [] };
     let allAlbums = [];
 
@@ -652,7 +651,7 @@ export const getStorageUsage = async (req, res) => {
       }
     }
 
-    // Audio Playlists Tracks
+
     const myOwnedAlbums = userData.audio?.albums || [];
     const myOwnedAlbumIds = myOwnedAlbums.map((a) => a.id);
     if (myOwnedAlbumIds.length > 0) {
