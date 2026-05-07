@@ -22,7 +22,7 @@ import {
   upsertSilanePlaylists,
   deleteOrphanedPlaylists,
   createHeraldSilane,
-  getAllHeraldSilaneAudio, 
+  getAllHeraldSilaneAudio,
 } from "../models/silaneAssetsModel.js";
 
 const generateRandomFileName = (originalName) => {
@@ -36,7 +36,6 @@ const generateRandomFileName = (originalName) => {
 
 const generatePublicId = () => crypto.randomBytes(8).toString("hex");
 
-
 const safeJsonParse = (data, fallback) => {
   if (!data) return fallback;
   if (typeof data === "object") return data;
@@ -47,9 +46,6 @@ const safeJsonParse = (data, fallback) => {
   }
 };
 
-// ==========================================
-// MEDIA (IMAGES)
-// ==========================================
 export const uploadMedia = async (req, res) => {
   try {
     if (!req.file) {
@@ -195,9 +191,6 @@ export const deleteMedia = async (req, res) => {
   }
 };
 
-// ==========================================
-// VISAGE
-// ==========================================
 export const uploadVisageImage = async (req, res) => {
   try {
     if (!req.file) {
@@ -318,9 +311,6 @@ export const updateVisageData = async (req, res) => {
   }
 };
 
-// ==========================================
-// CHARACTER
-// ==========================================
 export const updateCharacterData = async (req, res) => {
   try {
     const userId = req.user?.id;
@@ -415,9 +405,6 @@ export const updateCharacterData = async (req, res) => {
   }
 };
 
-// ==========================================
-// GET MASTER DATA (INCLUDES AUDIO)
-// ==========================================
 export const getDataSilane = async (req, res) => {
   try {
     const userId = req.user?.id;
@@ -444,7 +431,6 @@ export const getDataSilane = async (req, res) => {
       return `https://${domain}/${path}`;
     };
 
-    // Images
     if (data.images && data.images.length > 0) {
       const imageIds = data.images.map((img) => img.id);
       const { data: mediaRecords, error: mediaErr } = await getSilaneMediaByIds(
@@ -510,7 +496,6 @@ export const getDataSilane = async (req, res) => {
       }
     }
 
-
     if (data.character && data.character.items) {
       const charProfileIds = data.character.items
         .filter((i) => i.type === "character")
@@ -545,7 +530,6 @@ export const getDataSilane = async (req, res) => {
         }
       }
     }
-
 
     let audioData = { albums: [], playlists: [] };
     let allAlbums = [];
@@ -603,9 +587,6 @@ export const getDataSilane = async (req, res) => {
   }
 };
 
-// ==========================================
-// STORAGE USAGE
-// ==========================================
 export const getStorageUsage = async (req, res) => {
   try {
     const userId = req.user?.id;
@@ -636,7 +617,6 @@ export const getStorageUsage = async (req, res) => {
       return path.replace(/^\//, "");
     };
 
-    // Images
     if (userData.images && userData.images.length > 0) {
       const imageIds = userData.images.map((img) => img.id);
       const { data: mediaRecords } = await getSilaneMediaByIds(
@@ -650,7 +630,6 @@ export const getStorageUsage = async (req, res) => {
         });
       }
     }
-
 
     const myOwnedAlbums = userData.audio?.albums || [];
     const myOwnedAlbumIds = myOwnedAlbums.map((a) => a.id);
@@ -669,7 +648,6 @@ export const getStorageUsage = async (req, res) => {
       }
     }
 
-    // Visage
     if (userData.visage && userData.visage.items) {
       const profileIds = userData.visage.items
         .filter((i) => i.type === "profile")
@@ -688,7 +666,6 @@ export const getStorageUsage = async (req, res) => {
       }
     }
 
-    // Characters JSON
     if (userData.character && userData.character.items) {
       const charProfileIds = userData.character.items
         .filter((i) => i.type === "character")
@@ -716,7 +693,6 @@ export const getStorageUsage = async (req, res) => {
       }
     }
 
-    // Fetch Sizes from R2
     if (typeof getFileSizeFromR2 === "function") {
       await Promise.all(
         objectPaths.map(async (path) => {
@@ -749,9 +725,6 @@ export const getStorageUsage = async (req, res) => {
   }
 };
 
-// ==========================================
-// AUDIO ACTIONS
-// ==========================================
 export const uploadAudioTrack = async (req, res) => {
   try {
     if (!req.file) {

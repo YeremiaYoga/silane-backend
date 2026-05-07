@@ -23,15 +23,21 @@ const SILANE_DOMAIN = process.env.SILANE_PUBLIC_DOMAIN;
 export async function uploadAssetToR2({ file, folderName }) {
   if (!file || !file.buffer) return null;
 
-  const MAX_SIZE = 3 * 1024 * 1024;
+  const isImage = file.mimetype.startsWith("image/");
+  const isAudio = file.mimetype.startsWith("audio/");
+
+  const MAX_SIZE = isAudio ? 10 * 1024 * 1024 : 3 * 1024 * 1024;
   const currentSize = file.size || file.buffer.length;
+
   if (currentSize > MAX_SIZE) {
-    console.warn("⚠️ Failed because image file is over 3mb");
-    throw new Error("Failed because image file is over 3mb");
-    return null;
+    const errMsg = isAudio
+      ? "Failed because audio file is over 10mb"
+      : "Failed because file is over 3mb";
+    console.warn(`⚠️ ${errMsg}`);
+    throw new Error(errMsg);
   }
+
   try {
-    const isImage = file.mimetype.startsWith("image/");
     const uniqueId = nanoid(10);
     let fileBuffer = file.buffer;
     let filename;
