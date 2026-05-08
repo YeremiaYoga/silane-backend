@@ -760,7 +760,17 @@ export const uploadAudioTrack = async (req, res) => {
 
     let domain = process.env.SILANE_PUBLIC_DOMAIN || "";
     domain = domain.replace(/^https?:\/\//, "").replace(/\/$/, "");
-    const formattedUrl = `https://${domain}/${fullUrl}`;
+    
+    let path = fullUrl.replace(/^\//, "");
+    let formattedUrl = "";
+    
+    if (path.startsWith("http")) {
+      formattedUrl = path;
+    } else if (domain && path.startsWith(domain)) {
+      formattedUrl = `https://${path}`;
+    } else {
+      formattedUrl = `https://${domain}/${path}`;
+    }
 
     res.status(200).json({
       success: true,
