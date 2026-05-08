@@ -808,16 +808,16 @@ export const updateAudioAlbum = async (req, res) => {
 
     const existingAudio = myProfile?.audio || { albums: [], joined_albums: [] };
 
-    const myOwnedAlbums = albums.map((a) => {
-      return {
-        ...a,
-        user_id: userId,
-        joined_user:
-          a.joined_user?.length > 0
-            ? a.joined_user
-            : [{ user_id: userId, user_name: req.user?.username || "Owner" }],
-      };
-    });
+const myOwnedAlbums = albums.map((a) => {
+  return {
+    ...a,
+    user_id: userId,
+    joined_user:
+      a.joined_user?.length > 0
+        ? a.joined_user
+        : [{ user_id: userId, user_name: req.user?.username || "Owner" }],
+  };
+});
 
     const updatedAudio = { ...existingAudio, albums: myOwnedAlbums };
 
