@@ -6,6 +6,10 @@ import {
   getHeraldSilaneByUserId,
   createHeraldSilane
 } from "../models/silaneAssetsModel.js";
+import {
+  getHeraldsFireflyByUserId,
+  createHeraldsFirefly
+} from "../models/fireflyModel.js";
 
 const generatePublicId = () => crypto.randomBytes(8).toString("hex");
 
@@ -17,6 +21,35 @@ export const loginFoundry = async (req, res, next) => {
       return res.status(400).json({ success: false, message: "Secret ID is required!" });
     }
 
+    // ==========================================
+    // ADMIN LOGIN — cek apakah secretId = ADMIN_LOGIN_CODE di .env
+    // ==========================================
+    const adminCode = process.env.ADMIN_LOGIN_CODE;
+    if (adminCode && secretId === adminCode) {
+      const adminId = "00000000-0000-0000-0000-000000000000";
+      const token = jwt.sign(
+        { id: adminId, username: "Admin", role: "admin" },
+        process.env.JWT_SECRET,
+        { expiresIn: "30d" }
+      );
+
+      return res.json({
+        success: true,
+        message: "Admin login successful",
+        token,
+        user: {
+          id: adminId,
+          username: "Admin",
+          role: "admin",
+          profile_picture: null,
+          limits: null,
+        },
+      });
+    }
+
+    // ==========================================
+    // USER LOGIN — normal flow via hash
+    // ==========================================
     const hashedAttempt = createLoginHash(secretId);
     const user = await getUserByLoginHash(hashedAttempt);
 
@@ -40,10 +73,30 @@ export const loginFoundry = async (req, res, next) => {
       throw fetchError;
     }
 
+    // Auto-create heralds_firefly row jika belum ada
+    let { data: fireflyData, error: fireflyError } = await getHeraldsFireflyByUserId(user.id);
+    if (fireflyError && fireflyError.code === "PGRST116") {
+      const newFireflyData = {
+        user_id: user.id,
+        user_name: user.username,
+        weapons: [],
+        spells: [],
+        consumables: [],
+        containers: [],
+        equipments: [],
+        feats: [],
+        loots: [],
+        tools: [],
+      };
+      await createHeraldsFirefly(newFireflyData);
+    } else if (fireflyError) {
+      throw fireflyError;
+    }
+
     const token = jwt.sign(
       { id: user.id, username: user.username, role: user.role },
       process.env.JWT_SECRET,
-      { expiresIn: "30d" } // Sesuai instruksi 30 hari
+      { expiresIn: "30d" }
     );
 
     return res.json({
@@ -55,7 +108,7 @@ export const loginFoundry = async (req, res, next) => {
         username: user.username,
         role: user.role,
         profile_picture: user.profile_picture,
-        limits: user.limits, 
+        limits: user.limits,
       },
     });
   } catch (error) {

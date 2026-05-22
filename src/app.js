@@ -3,6 +3,7 @@ import cookieParser from "cookie-parser";
 
 import authRoutes from "./routes/authRoutes.js";
 import silaneAssetsRoutes from './routes/silaneAssetsRoutes.js';
+import fireflyRoutes from './routes/fireflyRoutes.js';
 
 const app = express();
 
@@ -25,6 +26,7 @@ app.use((req, res, next) => {
 
 app.use("/api/auth", authRoutes);
 app.use('/api/silane_assets', silaneAssetsRoutes);
+app.use('/api/firefly', fireflyRoutes);
 
 app.get("/", (req, res) => {
   const formattedTime = new Date().toLocaleString("en-US", {
