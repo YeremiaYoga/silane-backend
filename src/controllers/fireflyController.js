@@ -34,6 +34,8 @@ import {
   createHeraldsFirefly,
   appendToHeraldsFirefly,
   removeFromHeraldsFirefly,
+  // Admin: all homebrew
+  listAllHomebrewItems,
 } from "../models/fireflyModel.js";
 
 // ==========================================
@@ -886,4 +888,31 @@ export const getHomebrewCollection = async (req, res) => {
  */
 export const getHomebrewTypes = async (req, res) => {
   return res.status(200).json({ success: true, types: HOMEBREW_TYPES });
+};
+
+/**
+ * GET /api/firefly/admin/homebrew
+ * Admin only: list ALL homebrew items dari semua user
+ * Query: ?type=weapon&search=sword&limit=200&offset=0&user_id=xxx
+ */
+export const adminListAllHomebrew = async (req, res) => {
+  try {
+    const userRole = req.user?.role;
+    if (userRole !== "admin") {
+      return res.status(403).json({ success: false, message: "Admin access required" });
+    }
+
+    const { type, search, limit = 200, offset = 0, user_id } = req.query;
+    let items = await listAllHomebrewItems({ type, search, limit: Number(limit), offset: Number(offset) });
+
+    // Filter by user_id if provided
+    if (user_id) {
+      items = items.filter((i) => i.user_id === user_id);
+    }
+
+    return res.status(200).json({ success: true, count: items.length, items });
+  } catch (error) {
+    console.error("❌ adminListAllHomebrew error:", error);
+    return res.status(500).json({ success: false, message: "Failed to list all homebrew", error: error.message });
+  }
 };

@@ -602,6 +602,35 @@ export const listHomebrewAllTypes = async (userId, { search, limit = 100 } = {})
   return allItems;
 };
 
+/**
+ * Admin: list ALL homebrew items across all users
+ */
+export const listAllHomebrewItems = async ({ search, limit = 200, offset = 0, type } = {}) => {
+  if (type) {
+    const tableInfo = getHomebrewTableByType(type);
+    if (!tableInfo) throw new Error(`Invalid homebrew type: ${type}`);
+    let query = supabase.from(tableInfo.table).select("*").order("created_at", { ascending: false });
+    if (search) query = query.ilike("name", `%${search}%`);
+    query = query.range(offset, offset + limit - 1);
+    const { data, error } = await query;
+    if (error) { console.error(`❌ listAllHomebrewItems (${tableInfo.table}) error:`, error.message); throw error; }
+    return (data || []).map((row) => ({ ...row, __type: type, __table: tableInfo.table }));
+  }
+
+  let allItems = [];
+  for (const t of HOMEBREW_TABLES) {
+    let query = supabase.from(t.table).select("*");
+    if (search) query = query.ilike("name", `%${search}%`);
+    const { data, error } = await query;
+    if (error) { console.error(`❌ listAllHomebrewItems (${t.table}) error:`, error.message); continue; }
+    const mapped = (data || []).map((row) => ({ ...row, __type: t.key, __table: t.table }));
+    allItems = allItems.concat(mapped);
+  }
+  allItems.sort((a, b) => (a.name || "").localeCompare(b.name || ""));
+  if (limit) allItems = allItems.slice(0, Number(limit));
+  return allItems;
+};
+
 export const getHomebrewItemById = async (type, id, userId) => {
   const tableInfo = getHomebrewTableByType(type);
   if (!tableInfo) throw new Error(`Invalid homebrew type: ${type}`);

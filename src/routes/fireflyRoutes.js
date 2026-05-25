@@ -13,6 +13,8 @@ import {
   deleteHomebrewItems,
   getHomebrewCollection,
   getHomebrewTypes,
+  // Admin
+  adminListAllHomebrew,
 } from "../controllers/fireflyController.js";
 import { verifyToken } from "../middlewares/authMiddleware.js";
 
@@ -60,5 +62,12 @@ router.get("/homebrew/items/:type/:id", getHomebrewItem);
 
 // Delete homebrew items (+ hapus dari heralds_firefly)
 router.post("/homebrew/delete", deleteHomebrewItems);
+
+// ==========================================
+// ADMIN ROUTES
+// ==========================================
+
+// Admin: list ALL homebrew items dari semua user
+router.get("/admin/homebrew", adminListAllHomebrew);
 
 export default router;
