@@ -13,6 +13,7 @@ import {
   deleteHomebrewItems,
   getHomebrewCollection,
   getHomebrewTypes,
+  getHomebrewUsage,
   // Admin
   adminListAllHomebrew,
 } from "../controllers/fireflyController.js";
@@ -47,6 +48,9 @@ router.post("/delete", deleteFireflyItems);
 
 // Get homebrew types
 router.get("/homebrew/types", getHomebrewTypes);
+
+// Get homebrew storage usage
+router.get("/homebrew/usage", getHomebrewUsage);
 
 // Get user's homebrew collection (heralds_firefly summary)
 router.get("/homebrew/collection", getHomebrewCollection);

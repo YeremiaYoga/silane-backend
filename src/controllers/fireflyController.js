@@ -891,6 +891,33 @@ export const getHomebrewTypes = async (req, res) => {
 };
 
 /**
+ * GET /api/firefly/homebrew/usage
+ * Hitung total storage yang dipakai homebrew items user (JSON size)
+ */
+export const getHomebrewUsage = async (req, res) => {
+  try {
+    const userId = req.user?.id;
+    if (!userId) return res.status(401).json({ success: false, message: "Access denied" });
+
+    const items = await listHomebrewAllTypes(userId, { limit: 9999 });
+    let totalBytes = 0;
+    for (const item of items) {
+      if (item.raw_data) totalBytes += Buffer.byteLength(JSON.stringify(item.raw_data), "utf8");
+      if (item.format_data) totalBytes += Buffer.byteLength(JSON.stringify(item.format_data), "utf8");
+    }
+
+    const totalMb = (totalBytes / (1024 * 1024)).toFixed(2);
+    return res.status(200).json({
+      success: true,
+      data: { total_items: items.length, total_bytes: totalBytes, total_mb: parseFloat(totalMb) },
+    });
+  } catch (error) {
+    console.error("❌ getHomebrewUsage error:", error);
+    return res.status(500).json({ success: false, message: "Failed to calculate usage", error: error.message });
+  }
+};
+
+/**
  * GET /api/firefly/admin/homebrew
  * Admin only: list ALL homebrew items dari semua user
  * Query: ?type=weapon&search=sword&limit=200&offset=0&user_id=xxx

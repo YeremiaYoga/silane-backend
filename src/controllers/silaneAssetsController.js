@@ -25,6 +25,8 @@ import {
   getAllHeraldSilaneAudio,
 } from "../models/silaneAssetsModel.js";
 
+import { listHomebrewAllTypes } from "../models/fireflyModel.js";
+
 const generateRandomFileName = (originalName) => {
   const ext = originalName.includes(".")
     ? originalName.substring(originalName.lastIndexOf("."))
@@ -704,6 +706,17 @@ export const getStorageUsage = async (req, res) => {
           }
         }),
       );
+    }
+
+    // Hitung size homebrew items (firefly)
+    try {
+      const homebrewItems = await listHomebrewAllTypes(userId, { limit: 9999 });
+      for (const item of homebrewItems) {
+        if (item.raw_data) totalSizeBytes += Buffer.byteLength(JSON.stringify(item.raw_data), "utf8");
+        if (item.format_data) totalSizeBytes += Buffer.byteLength(JSON.stringify(item.format_data), "utf8");
+      }
+    } catch (err) {
+      console.warn("⚠️ Failed to calculate homebrew size:", err.message);
     }
 
     const totalSizeMB = (totalSizeBytes / (1024 * 1024)).toFixed(2);
