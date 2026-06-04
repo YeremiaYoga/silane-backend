@@ -11,7 +11,8 @@ import {
   uploadAudioTrack,
   updateAudioAlbum,
   updateAudioPlaylist,
-  joinAudioAlbum
+  joinAudioAlbum,
+  updateMediaData
 } from "../controllers/silaneAssetsController.js";
 import upload from "../middlewares/uploadMiddleware.js";
 import { verifyToken } from "../middlewares/authMiddleware.js";
@@ -24,6 +25,7 @@ router.get("/usage", verifyToken, getStorageUsage);
 // MEDIA (IMAGES)
 router.post("/upload", verifyToken, upload.single("file"), uploadMedia);
 router.post("/delete", verifyToken, deleteMedia);
+router.post("/image/update", verifyToken, upload.single("file"), updateMediaData);
 
 // VISAGE
 router.post("/visage/update", verifyToken, updateVisageData);

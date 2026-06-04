@@ -179,3 +179,8 @@ export const deleteOrphanedPlaylists = async (
     .in("album_id", activeAlbumIds)
     .not("uuid", "in", `(${activePlaylistUuids.join(",")})`);
 };
+
+export const updateSilaneMedia = async (type, uuid, updateData) => {
+  const tableName = type === "images" ? "silane_image" : `silane_${type}`;
+  return await supabase.from(tableName).update(updateData).eq("uuid", uuid).select("*").single();
+};

@@ -23,6 +23,7 @@ import {
   deleteOrphanedPlaylists,
   createHeraldSilane,
   getAllHeraldSilaneAudio,
+  updateSilaneMedia,
 } from "../models/silaneAssetsModel.js";
 
 import { listHomebrewAllTypes } from "../models/fireflyModel.js";
@@ -974,5 +975,101 @@ export const joinAudioAlbum = async (req, res) => {
   } catch (error) {
     console.error("JOIN ALBUM ERROR:", error);
     res.status(500).json({ success: false, error: error.message });
+  }
+};
+
+export const updateMediaData = async (req, res) => {
+  try {
+    const userId = req.user?.id;
+    const { id, name } = req.body;
+
+    if (!userId) {
+      return res.status(401).json({ message: "Access denied" });
+    }
+    if (!id || !name) {
+      return res.status(400).json({ message: "Invalid ID or name" });
+    }
+
+    const { data: userData, error: fetchError } = await getHeraldSilaneByUserId(userId);
+    if (fetchError || !userData?.public_id) {
+      return res.status(404).json({ message: "Silane profile data not found." });
+    }
+
+    const updateData = { name };
+
+    // Check if new file was uploaded to replace the image
+    if (req.file) {
+      // 1. Get the existing media record to get its link (so we can delete the old asset from R2)
+      const { data: mediaRecords, error: mediaErr } = await getSilaneMediaByIds("images", [id]);
+      if (!mediaErr && mediaRecords && mediaRecords.length > 0) {
+        const oldLink = mediaRecords[0].link;
+        if (oldLink) {
+          try {
+            await deleteAssetFromR2(oldLink);
+          } catch (deleteErr) {
+            console.warn("Failed to delete old asset from R2:", deleteErr.message);
+          }
+        }
+      }
+
+      // 2. Upload the new file to R2
+      const randomFileName = generateRandomFileName(req.file.originalname);
+      req.file.originalname = randomFileName;
+
+      let publicUrl;
+      try {
+        publicUrl = await uploadAssetToR2({
+          file: req.file,
+          folderName: userData.public_id,
+        });
+      } catch (uploadErr) {
+        return res.status(400).json({ message: uploadErr.message || "Upload failed." });
+      }
+
+      updateData.link = publicUrl;
+    }
+
+    // Update the database table silane_image
+    const { data: updatedMedia, error: updateErr } = await updateSilaneMedia("images", id, updateData);
+    if (updateErr) throw updateErr;
+
+    // Update user's herald_silane images JSON
+    const currentFiles = userData.images || [];
+    const updatedFiles = currentFiles.map(file => {
+      if (String(file.id) === String(id)) {
+        return { ...file, name };
+      }
+      return file;
+    });
+
+    await updateHeraldSilaneByUserId(userId, { images: updatedFiles });
+
+    // Format public URL for client response
+    let domain = process.env.SILANE_PUBLIC_DOMAIN || "";
+    domain = domain.replace(/^https?:\/\//, "").replace(/\/$/, "");
+
+    const formatUrl = (link) => {
+      if (!link) return null;
+      if (link.startsWith("http")) return link;
+      let path = link.replace(/^\//, "");
+      if (domain && path.startsWith(domain)) {
+        return `https://${path}`;
+      }
+      return `https://${domain}/${path}`;
+    };
+
+    const finalUrl = formatUrl(updatedMedia ? updatedMedia.link : null);
+
+    res.status(200).json({
+      message: "Image asset updated successfully",
+      file: {
+        id,
+        name,
+        url: finalUrl
+      }
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Failed to update image asset", error: error.message });
   }
 };
