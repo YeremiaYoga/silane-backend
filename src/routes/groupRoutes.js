@@ -15,7 +15,9 @@ import {
   deleteGroupResource,
   addMission,
   updateMission,
-  deleteMission
+  deleteMission,
+  listTarotCards,
+  updateGroupResource
 } from "../controllers/groupController.js";
 
 const router = express.Router();
@@ -24,6 +26,9 @@ router.use(verifyToken);
 
 // List user's groups
 router.get("/", getUserGroups);
+
+// List all Tarot Cards
+router.get("/tarot-cards", listTarotCards);
 
 // Create group
 router.post("/", createGroup);
@@ -48,6 +53,7 @@ router.post("/:id/members/:memberUserId/role", updateMemberRole);
 
 // Group resources (characters, NPCs, journals)
 router.post("/:id/resources", addGroupResource);
+router.patch("/:id/resources/:resourceId", updateGroupResource);
 router.delete("/:id/resources/:resourceId", deleteGroupResource);
 
 // Group missions

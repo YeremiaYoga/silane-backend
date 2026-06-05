@@ -25,18 +25,62 @@ const generateMissionId = () => {
   return `m_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 };
 
+const hydrateGroupResources = async (resources) => {
+  const safeRes = Array.isArray(resources) ? resources : [];
+  const tarotIds = [];
+  safeRes.forEach(r => {
+    if (Array.isArray(r.tarot_ids) && r.tarot_ids.length > 0) {
+      tarotIds.push(...r.tarot_ids);
+    }
+  });
+
+  const uniqueTarotIds = [...new Set(tarotIds)];
+  let tarotMap = {};
+
+  if (uniqueTarotIds.length > 0) {
+    try {
+      const { data, error } = await supabase
+        .from("tarot_card")
+        .select("id, name, type, image, description")
+        .in("id", uniqueTarotIds);
+      if (!error && data) {
+        tarotMap = Object.fromEntries(data.map(c => [String(c.id), c]));
+      }
+    } catch (e) {
+      console.error("❌ Failed to hydrate tarot cards:", e);
+    }
+  }
+
+  return safeRes.map(r => {
+    let tarotData = [];
+    if (Array.isArray(r.tarot_ids)) {
+      tarotData = r.tarot_ids
+        .map(id => tarotMap[String(id)] || null)
+        .filter(Boolean);
+    }
+    return {
+      ...r,
+      tarot_card: tarotData
+    };
+  });
+};
+
 export const getGroupById = async (req, res) => {
   try {
     const { id } = req.params;
     const { data, error } = await supabase
       .from("groups")
-      .select("id, name, description, color, icon, share_code, members, resources, missions, max_members, creator_name, creator_id, created_at, roles")
+      .select("id, name, description, color, icon, share_code, members, resources, missions, max_members, creator_name, creator_id, created_at, roles, friend_invite_enabled, tarot_card")
       .eq("id", id)
       .single();
 
     if (error) {
       if (error.code === "PGRST116") return res.status(404).json({ success: false, message: "Group not found" });
       throw error;
+    }
+
+    if (data) {
+      data.resources = await hydrateGroupResources(data.resources);
     }
 
     return res.json({ success: true, data });
@@ -51,13 +95,17 @@ export const getGroupByShareCode = async (req, res) => {
     const { code } = req.params;
     const { data, error } = await supabase
       .from("groups")
-      .select("id, name, description, color, icon, share_code, members, resources, missions, max_members, creator_name, creator_id, created_at, roles")
+      .select("id, name, description, color, icon, share_code, members, resources, missions, max_members, creator_name, creator_id, created_at, roles, friend_invite_enabled, tarot_card")
       .eq("share_code", code)
       .single();
 
     if (error) {
       if (error.code === "PGRST116") return res.status(404).json({ success: false, message: "Group not found" });
       throw error;
+    }
+
+    if (data) {
+      data.resources = await hydrateGroupResources(data.resources);
     }
 
     return res.json({ success: true, data });
@@ -74,7 +122,7 @@ export const getUserGroups = async (req, res) => {
 
     const { data, error } = await supabase
       .from("groups")
-      .select("id, name, description, color, icon, share_code, members, resources, missions, max_members, creator_name, creator_id, created_at, roles");
+      .select("id, name, description, color, icon, share_code, members, resources, missions, max_members, creator_name, creator_id, created_at, roles, friend_invite_enabled, tarot_card");
 
     if (error) throw error;
 
@@ -85,6 +133,13 @@ export const getUserGroups = async (req, res) => {
       const members = Array.isArray(g.members) ? g.members : [];
       return members.some(m => String(m.user_id) === String(userId));
     });
+
+    for (const g of owned) {
+      g.resources = await hydrateGroupResources(g.resources);
+    }
+    for (const g of member) {
+      g.resources = await hydrateGroupResources(g.resources);
+    }
 
     return res.json({ success: true, owned, member });
   } catch (err) {
@@ -132,7 +187,7 @@ export const createGroup = async (req, res) => {
     const { data, error } = await supabase
       .from("groups")
       .insert([payload])
-      .select("id, name, description, color, icon, share_code, members, resources, missions, max_members, creator_name, creator_id, created_at")
+      .select("id, name, description, color, icon, share_code, members, resources, missions, max_members, creator_name, creator_id, created_at, friend_invite_enabled, tarot_card")
       .single();
 
     if (error) throw error;
@@ -174,6 +229,7 @@ export const joinGroup = async (req, res) => {
     const members = Array.isArray(group.members) ? group.members : [];
     const isAlreadyMember = members.some(m => String(m.user_id) === String(userId));
     if (isAlreadyMember) {
+      group.resources = await hydrateGroupResources(group.resources);
       return res.json({ success: true, message: "Already a member", data: group });
     }
 
@@ -188,10 +244,14 @@ export const joinGroup = async (req, res) => {
       .from("groups")
       .update({ members: nextMembers })
       .eq("id", group.id)
-      .select("id, name, description, color, icon, share_code, members, resources, missions, max_members, creator_name, creator_id, created_at")
+      .select("id, name, description, color, icon, share_code, members, resources, missions, max_members, creator_name, creator_id, created_at, friend_invite_enabled, tarot_card")
       .single();
 
     if (updateErr) throw updateErr;
+
+    if (updatedGroup) {
+      updatedGroup.resources = await hydrateGroupResources(updatedGroup.resources);
+    }
 
     return res.json({ success: true, message: "Joined successfully", data: updatedGroup });
   } catch (err) {
@@ -403,7 +463,8 @@ export const addGroupResource = async (req, res) => {
 
     if (updateErr) throw updateErr;
 
-    return res.json({ success: true, message: "Resource added successfully", resources: nextResources });
+    const hydrated = await hydrateGroupResources(nextResources);
+    return res.json({ success: true, message: "Resource added successfully", resources: hydrated });
   } catch (err) {
     console.error("❌ addGroupResource:", err);
     return res.status(500).json({ success: false, message: "Failed to add resource" });
@@ -444,7 +505,8 @@ export const deleteGroupResource = async (req, res) => {
 
     if (updateErr) throw updateErr;
 
-    return res.json({ success: true, message: "Resource removed successfully", resources: nextResources });
+    const hydrated = await hydrateGroupResources(nextResources);
+    return res.json({ success: true, message: "Resource removed successfully", resources: hydrated });
   } catch (err) {
     console.error("❌ deleteGroupResource:", err);
     return res.status(500).json({ success: false, message: "Failed to remove resource" });
@@ -458,7 +520,7 @@ export const addMission = async (req, res) => {
     if (!userId) return res.status(401).json({ success: false, message: "Unauthorized" });
 
     const { id: groupId } = req.params;
-    const { title, type, description, reward, image, required_level, notes, player_notes, objectives } = req.body;
+    const { title, type, description, reward, image, required_level, notes, player_notes, objectives, steps, rewards, reward_items } = req.body;
 
     if (!title || !title.trim()) {
       return res.status(400).json({ success: false, message: "title is required" });
@@ -485,6 +547,9 @@ export const addMission = async (req, res) => {
       notes: notes || "",
       player_notes: player_notes || "",
       objectives: objectives || [],
+      steps: Array.isArray(steps) ? steps : [{ title: "Step 1", description: "", objectives: [] }],
+      rewards: Array.isArray(rewards) ? rewards : [],
+      reward_items: Array.isArray(reward_items) ? reward_items : [],
       created_by: { id: String(userId), name: userName },
       created_at: new Date().toISOString()
     };
@@ -510,7 +575,7 @@ export const updateMission = async (req, res) => {
     if (!userId) return res.status(401).json({ success: false, message: "Unauthorized" });
 
     const { id: groupId, missionId } = req.params;
-    const { title, type, description, reward, status, objectives, image, required_level, notes, player_notes } = req.body;
+    const { title, type, description, reward, status, objectives, image, required_level, notes, player_notes, steps, rewards, reward_items } = req.body;
 
     const { data: group, error: fetchErr } = await supabase
       .from("groups")
@@ -531,6 +596,9 @@ export const updateMission = async (req, res) => {
           reward: reward !== undefined ? reward : m.reward,
           status: status !== undefined ? status : m.status,
           objectives: objectives !== undefined ? objectives : m.objectives,
+          steps: steps !== undefined ? steps : m.steps,
+          rewards: rewards !== undefined ? rewards : m.rewards,
+          reward_items: reward_items !== undefined ? reward_items : m.reward_items,
           image: image !== undefined ? image : m.image,
           required_level: required_level !== undefined ? (required_level ? Number(required_level) : null) : m.required_level,
           notes: notes !== undefined ? notes : m.notes,
@@ -593,7 +661,7 @@ export const updateGroup = async (req, res) => {
     if (!userId) return res.status(401).json({ success: false, message: "Unauthorized" });
 
     const { id } = req.params;
-    const { name, description, color, password, roles, members } = req.body;
+    const { name, description, color, password, roles, members, friend_invite_enabled, tarot_card, max_members, icon } = req.body;
 
     const { data: group, error: fetchErr } = await supabase
       .from("groups")
@@ -617,20 +685,126 @@ export const updateGroup = async (req, res) => {
     if (password !== undefined) payload.password = password && password.trim() ? password.trim() : null;
     if (roles !== undefined) payload.roles = roles;
     if (members !== undefined) payload.members = members;
+    if (friend_invite_enabled !== undefined) payload.friend_invite_enabled = friend_invite_enabled;
+    if (tarot_card !== undefined) payload.tarot_card = tarot_card;
+    if (max_members !== undefined) payload.max_members = max_members;
+    if (icon !== undefined) payload.icon = icon;
 
     const { data: updatedGroup, error: updateErr } = await supabase
       .from("groups")
       .update(payload)
       .eq("id", id)
-      .select("id, name, description, color, icon, share_code, members, resources, missions, max_members, creator_name, creator_id, created_at, roles")
+      .select("id, name, description, color, icon, share_code, members, resources, missions, max_members, creator_name, creator_id, created_at, roles, friend_invite_enabled, tarot_card")
       .single();
 
     if (updateErr) throw updateErr;
+
+    if (updatedGroup) {
+      updatedGroup.resources = await hydrateGroupResources(updatedGroup.resources);
+    }
 
     return res.json({ success: true, message: "Group updated successfully", data: updatedGroup });
   } catch (err) {
     console.error("❌ updateGroup:", err);
     return res.status(500).json({ success: false, message: "Failed to update group" });
+  }
+};
+
+export const listTarotCards = async (req, res) => {
+  try {
+    const { data, error } = await supabase
+      .from("tarot_card")
+      .select("*")
+      .order("name", { ascending: true });
+
+    if (error) throw error;
+
+    return res.json(data || []);
+  } catch (err) {
+    console.error("❌ listTarotCards:", err);
+    return res.status(500).json({ success: false, message: "Failed to get tarot cards" });
+  }
+};
+
+export const updateGroupResource = async (req, res) => {
+  try {
+    const userId = req.user?.id;
+    if (!userId) return res.status(401).json({ success: false, message: "Unauthorized" });
+
+    const { id: groupId, resourceId } = req.params;
+    const { visibility, hidden, tarot_ids, active } = req.body;
+
+    const wantsVisibility = visibility !== undefined;
+    const wantsHidden = hidden !== undefined;
+    const wantsTarot = Array.isArray(tarot_ids);
+    const wantsActive = active !== undefined;
+
+    if (!wantsVisibility && !wantsHidden && !wantsTarot && !wantsActive) {
+      return res.status(400).json({
+        success: false,
+        message: "Nothing to update. Provide 'visibility', 'hidden', 'tarot_ids', or 'active'."
+      });
+    }
+
+    const { data: group, error: fetchErr } = await supabase
+      .from("groups")
+      .select("*")
+      .eq("id", groupId)
+      .single();
+
+    if (fetchErr) {
+      if (fetchErr.code === "PGRST116") return res.status(404).json({ success: false, message: "Group not found" });
+      throw fetchErr;
+    }
+
+    // Check membership
+    const members = Array.isArray(group.members) ? group.members : [];
+    const isCreator = String(group.creator_id) === String(userId);
+    const isMember = isCreator || members.some(m => String(m.user_id) === String(userId));
+    if (!isMember) {
+      return res.status(403).json({ success: false, message: "You are not a member of this group" });
+    }
+
+    const resources = Array.isArray(group.resources) ? group.resources : [];
+    const idx = resources.findIndex(r => String(r.resource_id) === String(resourceId));
+    if (idx === -1) {
+      return res.status(404).json({ success: false, message: "Resource not found in this group" });
+    }
+
+    const target = resources[idx];
+    const isOwner = String(target.owner_id) === String(userId);
+
+    // Permission check: only Creator or Resource Owner can modify
+    if (!isCreator && !isOwner) {
+      return res.status(403).json({ success: false, message: "No permission to modify this resource" });
+    }
+
+    const nextResources = resources.map((r, i) => {
+      if (i !== idx) return r;
+      const patch = { ...r };
+      if (wantsVisibility) patch.visibility = visibility;
+      if (wantsHidden) patch.hidden = Boolean(hidden);
+      if (wantsTarot) patch.tarot_ids = tarot_ids;
+      if (wantsActive) patch.active = Boolean(active);
+      return patch;
+    });
+
+    const { data: updatedGroup, error: updateErr } = await supabase
+      .from("groups")
+      .update({ resources: nextResources })
+      .eq("id", groupId)
+      .select("id, name, description, color, icon, share_code, members, resources, missions, max_members, creator_name, creator_id, created_at, roles, friend_invite_enabled, tarot_card")
+      .single();
+
+    if (updateErr) throw updateErr;
+
+    const hydratedRes = await hydrateGroupResources(updatedGroup.resources);
+    const { password, ...safe } = updatedGroup || {};
+
+    return res.json({ success: true, message: "Resource updated successfully", data: { ...safe, resources: hydratedRes } });
+  } catch (err) {
+    console.error("❌ updateGroupResource:", err);
+    return res.status(500).json({ success: false, message: "Failed to update resource" });
   }
 };
 
