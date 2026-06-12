@@ -12,7 +12,7 @@ import {
   updateAudioAlbum,
   updateAudioPlaylist,
   joinAudioAlbum,
-  updateMediaData
+  updateMediaData,
 } from "../controllers/silaneAssetsController.js";
 import upload from "../middlewares/uploadMiddleware.js";
 import { verifyToken } from "../middlewares/authMiddleware.js";

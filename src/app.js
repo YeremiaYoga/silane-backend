@@ -5,6 +5,7 @@ import authRoutes from "./routes/authRoutes.js";
 import silaneAssetsRoutes from './routes/silaneAssetsRoutes.js';
 import fireflyRoutes from './routes/fireflyRoutes.js';
 import groupRoutes from './routes/groupRoutes.js';
+import igniteCharacterRoutes from './routes/igniteCharacterRoutes.js';
 
 const app = express();
 
@@ -27,6 +28,7 @@ app.use((req, res, next) => {
 
 app.use("/api/auth", authRoutes);
 app.use('/api/silane_assets', silaneAssetsRoutes);
+app.use('/api/silane_assets', igniteCharacterRoutes);
 app.use('/api/firefly', fireflyRoutes);
 app.use('/api/groups', groupRoutes);
 
