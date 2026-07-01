@@ -13,6 +13,10 @@ import {
   updateAudioPlaylist,
   joinAudioAlbum,
   updateMediaData,
+  createCharacterBackup,
+  getCharacterBackups,
+  getSingleBackupData,
+  deleteCharacterBackup,
 } from "../controllers/silaneAssetsController.js";
 import upload from "../middlewares/uploadMiddleware.js";
 import { verifyToken } from "../middlewares/authMiddleware.js";
@@ -38,6 +42,12 @@ router.post(
 
 // CHARACTER
 router.post("/character/update", verifyToken, updateCharacterData);
+
+// CHARACTER BACKUPS
+router.post("/character/backup/create", verifyToken, createCharacterBackup);
+router.get("/character/backup/list", verifyToken, getCharacterBackups);
+router.get("/character/backup/:backupId", verifyToken, getSingleBackupData);
+router.post("/character/backup/delete", verifyToken, deleteCharacterBackup);
 
 // AUDIO
 router.post("/audio/upload", verifyToken, upload.single("file"), uploadAudioTrack);

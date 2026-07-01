@@ -24,6 +24,10 @@ import {
   createHeraldSilane,
   getAllHeraldSilaneAudio,
   updateSilaneMedia,
+  insertCharacterBackup,
+  getCharacterBackupsByUserId,
+  getCharacterBackupById,
+  deleteCharacterBackupById,
 } from "../models/silaneAssetsModel.js";
 
 import { listHomebrewAllTypes } from "../models/fireflyModel.js";
@@ -1071,5 +1075,105 @@ export const updateMediaData = async (req, res) => {
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: "Failed to update image asset", error: error.message });
+  }
+};
+
+export const createCharacterBackup = async (req, res) => {
+  try {
+    const userId = req.user?.id;
+    const { characterId, name, worldId, worldTitle, actorData } = req.body;
+
+    if (!userId) {
+      return res.status(401).json({ message: "Access denied: Invalid user." });
+    }
+    if (!characterId || !name || !worldId || !worldTitle || !actorData) {
+      return res.status(400).json({ message: "Missing required backup fields." });
+    }
+
+    const { data, error } = await insertCharacterBackup({
+      user_id: userId,
+      character_id: characterId,
+      name,
+      world_id: worldId,
+      world_title: worldTitle,
+      actor_data: actorData
+    });
+
+    if (error) throw error;
+
+    res.status(200).json({
+      message: "Backup created successfully",
+      data
+    });
+  } catch (error) {
+    console.error("createCharacterBackup Error:", error);
+    res.status(500).json({ message: "Failed to create character backup", error: error.message });
+  }
+};
+
+export const getCharacterBackups = async (req, res) => {
+  try {
+    const userId = req.user?.id;
+    if (!userId) {
+      return res.status(401).json({ message: "Access denied: Invalid user." });
+    }
+
+    const { data, error } = await getCharacterBackupsByUserId(userId);
+    if (error) throw error;
+
+    res.status(200).json({
+      data: data || []
+    });
+  } catch (error) {
+    console.error("getCharacterBackups Error:", error);
+    res.status(500).json({ message: "Failed to fetch backups", error: error.message });
+  }
+};
+
+export const getSingleBackupData = async (req, res) => {
+  try {
+    const userId = req.user?.id;
+    const { backupId } = req.params;
+
+    if (!userId) {
+      return res.status(401).json({ message: "Access denied: Invalid user." });
+    }
+
+    const { data, error } = await getCharacterBackupById(backupId, userId);
+    if (error) throw error;
+    if (!data) {
+      return res.status(404).json({ message: "Backup data not found." });
+    }
+
+    res.status(200).json({
+      data: data.actor_data
+    });
+  } catch (error) {
+    console.error("getSingleBackupData Error:", error);
+    res.status(500).json({ message: "Failed to fetch backup data", error: error.message });
+  }
+};
+
+export const deleteCharacterBackup = async (req, res) => {
+  try {
+    const userId = req.user?.id;
+    const { backupId } = req.body;
+
+    if (!userId) {
+      return res.status(401).json({ message: "Access denied: Invalid user." });
+    }
+    if (!backupId) {
+      return res.status(400).json({ message: "Missing backup ID." });
+    }
+
+    const { error } = await deleteCharacterBackupById(backupId, userId);
+    if (error) throw error;
+
+    res.status(200).json({
+      message: "Backup deleted successfully"
+    });
+  } catch (error) {
+    console.error("deleteCharacterBackup Error:", error);
+    res.status(500).json({ message: "Failed to delete backup", error: error.message });
   }
 };

@@ -184,3 +184,32 @@ export const updateSilaneMedia = async (type, uuid, updateData) => {
   const tableName = type === "images" ? "silane_image" : `silane_${type}`;
   return await supabase.from(tableName).update(updateData).eq("uuid", uuid).select("*").single();
 };
+
+export const insertCharacterBackup = async (data) => {
+  return await supabase.from("foundry_characters_backup").insert([data]).select("*").single();
+};
+
+export const getCharacterBackupsByUserId = async (userId) => {
+  return await supabase
+    .from("foundry_characters_backup")
+    .select("id, character_id, name, world_id, world_title, created_at")
+    .eq("user_id", userId)
+    .order("created_at", { ascending: false });
+};
+
+export const getCharacterBackupById = async (id, userId) => {
+  return await supabase
+    .from("foundry_characters_backup")
+    .select("actor_data")
+    .eq("id", id)
+    .eq("user_id", userId)
+    .single();
+};
+
+export const deleteCharacterBackupById = async (id, userId) => {
+  return await supabase
+    .from("foundry_characters_backup")
+    .delete()
+    .eq("id", id)
+    .eq("user_id", userId);
+};
