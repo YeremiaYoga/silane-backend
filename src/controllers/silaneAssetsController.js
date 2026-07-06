@@ -28,6 +28,7 @@ import {
   getCharacterBackupsByUserId,
   getCharacterBackupById,
   deleteCharacterBackupById,
+  getCharacterBackupsSizeByUserId,
 } from "../models/silaneAssetsModel.js";
 
 import { listHomebrewAllTypes } from "../models/fireflyModel.js";
@@ -722,6 +723,14 @@ export const getStorageUsage = async (req, res) => {
       }
     } catch (err) {
       console.warn("⚠️ Failed to calculate homebrew size:", err.message);
+    }
+
+    // Hitung size character backups
+    try {
+      const backupSizeBytes = await getCharacterBackupsSizeByUserId(userId);
+      totalSizeBytes += backupSizeBytes;
+    } catch (err) {
+      console.warn("⚠️ Failed to calculate character backup size:", err.message);
     }
 
     const totalSizeMB = (totalSizeBytes / (1024 * 1024)).toFixed(2);

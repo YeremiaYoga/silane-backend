@@ -213,3 +213,28 @@ export const deleteCharacterBackupById = async (id, userId) => {
     .eq("id", id)
     .eq("user_id", userId);
 };
+
+export const getCharacterBackupsSizeByUserId = async (userId) => {
+  const { data, error } = await supabase
+    .from("foundry_characters_backup")
+    .select("actor_data")
+    .eq("user_id", userId);
+  
+  if (error) throw error;
+  
+  let totalBytes = 0;
+  if (data) {
+    for (const row of data) {
+      if (row.actor_data) {
+        let actorStr = "";
+        if (typeof row.actor_data === "string") {
+          actorStr = row.actor_data;
+        } else {
+          actorStr = JSON.stringify(row.actor_data);
+        }
+        totalBytes += Buffer.byteLength(actorStr, "utf8");
+      }
+    }
+  }
+  return totalBytes;
+};
