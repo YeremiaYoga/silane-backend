@@ -714,7 +714,6 @@ export const getStorageUsage = async (req, res) => {
       );
     }
 
-    // Hitung size homebrew items (firefly)
     try {
       const homebrewItems = await listHomebrewAllTypes(userId, { limit: 9999 });
       for (const item of homebrewItems) {
@@ -725,7 +724,6 @@ export const getStorageUsage = async (req, res) => {
       console.warn("⚠️ Failed to calculate homebrew size:", err.message);
     }
 
-    // Hitung size character backups
     try {
       const backupSizeBytes = await getCharacterBackupsSizeByUserId(userId);
       totalSizeBytes += backupSizeBytes;
@@ -787,10 +785,10 @@ export const uploadAudioTrack = async (req, res) => {
 
     let domain = process.env.SILANE_PUBLIC_DOMAIN || "";
     domain = domain.replace(/^https?:\/\//, "").replace(/\/$/, "");
-    
+
     let path = fullUrl.replace(/^\//, "");
     let formattedUrl = "";
-    
+
     if (path.startsWith("http")) {
       formattedUrl = path;
     } else if (domain && path.startsWith(domain)) {
@@ -1010,9 +1008,8 @@ export const updateMediaData = async (req, res) => {
 
     const updateData = { name };
 
-    // Check if new file was uploaded to replace the image
     if (req.file) {
-      // 1. Get the existing media record to get its link (so we can delete the old asset from R2)
+
       const { data: mediaRecords, error: mediaErr } = await getSilaneMediaByIds("images", [id]);
       if (!mediaErr && mediaRecords && mediaRecords.length > 0) {
         const oldLink = mediaRecords[0].link;
@@ -1025,7 +1022,6 @@ export const updateMediaData = async (req, res) => {
         }
       }
 
-      // 2. Upload the new file to R2
       const randomFileName = generateRandomFileName(req.file.originalname);
       req.file.originalname = randomFileName;
 
@@ -1042,11 +1038,9 @@ export const updateMediaData = async (req, res) => {
       updateData.link = publicUrl;
     }
 
-    // Update the database table silane_image
     const { data: updatedMedia, error: updateErr } = await updateSilaneMedia("images", id, updateData);
     if (updateErr) throw updateErr;
 
-    // Update user's herald_silane images JSON
     const currentFiles = userData.images || [];
     const updatedFiles = currentFiles.map(file => {
       if (String(file.id) === String(id)) {
@@ -1057,7 +1051,6 @@ export const updateMediaData = async (req, res) => {
 
     await updateHeraldSilaneByUserId(userId, { images: updatedFiles });
 
-    // Format public URL for client response
     let domain = process.env.SILANE_PUBLIC_DOMAIN || "";
     domain = domain.replace(/^https?:\/\//, "").replace(/\/$/, "");
 

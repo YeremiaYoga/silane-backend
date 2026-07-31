@@ -14,7 +14,7 @@ import {
   deleteItemsByIds,
   isValidFireflyType,
   getValidTypes,
-  // Homebrew
+
   bulkInsertHomebrewWeapons,
   bulkInsertHomebrewConsumables,
   bulkInsertHomebrewContainers,
@@ -29,23 +29,18 @@ import {
   listHomebrewAllTypes,
   getHomebrewItemById,
   deleteHomebrewItemsByIds,
-  // Heralds Firefly
+
   getHeraldsFireflyByUserId,
   createHeraldsFirefly,
   appendToHeraldsFirefly,
   removeFromHeraldsFirefly,
-  // Admin: all homebrew
+
   listAllHomebrewItems,
 } from "../models/fireflyModel.js";
-
-// ==========================================
-// CONSTANTS & HELPERS (referensi dari admin project-ignite)
-// ==========================================
 
 const ALLOWED_TYPES = getValidTypes();
 const HOMEBREW_TYPES = getHomebrewValidTypes();
 
-// Map type ke kolom di heralds_firefly
 const TYPE_TO_FIREFLY_COLUMN = {
   weapon: "weapons",
   consumable: "consumables",
@@ -70,7 +65,7 @@ function normalizeItem(raw) {
 function resolveImage(itemImg) {
   if (!itemImg) return null;
   if (/^https?:\/\//i.test(itemImg)) return itemImg;
-  return itemImg; // simpan path apa adanya
+  return itemImg;
 }
 
 function getCompendiumSource(rawItem) {
@@ -117,10 +112,6 @@ function buildDamage(system) {
   const magical_bonus = `${n}d${d}` + (bonus ? (bonus.startsWith("-") ? bonus : `+${bonus}`) : "");
   return { types, number: n, denomination: d, bonus, magical_bonus };
 }
-
-// ==========================================
-// BUILD PAYLOAD PER TYPE (kolom persis seperti admin)
-// ==========================================
 
 function buildWeaponPayload(raw, normalized) {
   const { name, type, system, img } = normalized;
@@ -302,10 +293,6 @@ function buildFeaturePayload(raw, normalized) {
   };
 }
 
-// ==========================================
-// MAIN: Filter items dan group by type
-// ==========================================
-
 function filterAndGroupItems(rawItems) {
   const grouped = {};
   const rejected = [];
@@ -356,16 +343,6 @@ function filterAndGroupItems(rawItems) {
   return { grouped, rejected };
 }
 
-// ==========================================
-// CONTROLLERS
-// ==========================================
-
-/**
- * POST /api/firefly/import
- * Import items dari JSON. 
- * - Admin (role=admin) → simpan ke foundry_* tables
- * - User biasa → simpan ke *_homebrew tables + catat di heralds_firefly
- */
 export const importFireflyItems = async (req, res) => {
   try {
     const userId = req.user?.id;
@@ -393,9 +370,7 @@ export const importFireflyItems = async (req, res) => {
     const isAdmin = userRole === "admin";
 
     if (isAdmin) {
-      // ==========================================
-      // ADMIN — insert ke foundry_* tables (original)
-      // ==========================================
+
       if (grouped.weapon?.length) {
         const inserted = await bulkInsertWeapons(grouped.weapon);
         results.weapon = inserted.length;
@@ -442,9 +417,7 @@ export const importFireflyItems = async (req, res) => {
         totalInserted += inserted.length;
       }
     } else {
-      // ==========================================
-      // USER BIASA — insert ke *_homebrew tables + catat di heralds_firefly
-      // ==========================================
+
       if (grouped.weapon?.length) {
         const inserted = await bulkInsertHomebrewWeapons(grouped.weapon, userId, userName);
         results.weapon = inserted.length;
@@ -501,7 +474,7 @@ export const importFireflyItems = async (req, res) => {
         const entries = inserted.map((i) => ({ id: i.id, name: i.name, image: i.image }));
         await appendToHeraldsFirefly(userId, "feats", entries);
       }
-      // feature tidak ada di homebrew tables, skip
+
     }
 
     return res.status(200).json({
@@ -520,12 +493,6 @@ export const importFireflyItems = async (req, res) => {
   }
 };
 
-/**
- * GET /api/firefly/items
- * List items. Query: ?type=weapon&search=sword&limit=50&offset=0
- * - Admin → query dari foundry_* tables
- * - User biasa → query dari *_homebrew tables (milik user sendiri)
- */
 export const listFireflyItems = async (req, res) => {
   try {
     const userId = req.user?.id;
@@ -537,14 +504,14 @@ export const listFireflyItems = async (req, res) => {
 
     let items;
     if (isAdmin) {
-      // Admin → foundry_* tables
+
       if (type && isValidFireflyType(type)) {
         items = await listItemsByType(type, { search, limit: Number(limit), offset: Number(offset) });
       } else {
         items = await listItemsAllTypes({ search, limit: Number(limit) });
       }
     } else {
-      // User biasa → *_homebrew tables
+
       if (type && isValidHomebrewType(type)) {
         items = await listHomebrewItemsByType(type, userId, { search, limit: Number(limit), offset: Number(offset) });
       } else {
@@ -559,9 +526,6 @@ export const listFireflyItems = async (req, res) => {
   }
 };
 
-/**
- * GET /api/firefly/items/:type/:id
- */
 export const getFireflyItem = async (req, res) => {
   try {
     const userId = req.user?.id;
@@ -582,12 +546,6 @@ export const getFireflyItem = async (req, res) => {
   }
 };
 
-/**
- * POST /api/firefly/delete
- * Body: { type: "weapon", ids: ["uuid1", "uuid2"] }
- * - Admin → hapus dari foundry_* tables
- * - User biasa → hapus dari *_homebrew tables + hapus dari heralds_firefly
- */
 export const deleteFireflyItems = async (req, res) => {
   try {
     const userId = req.user?.id;
@@ -611,7 +569,7 @@ export const deleteFireflyItems = async (req, res) => {
         return res.status(400).json({ success: false, message: "Valid homebrew type is required" });
       }
       await deleteHomebrewItemsByIds(type, ids, userId);
-      // Hapus juga dari heralds_firefly
+
       const column = TYPE_TO_FIREFLY_COLUMN[type];
       if (column) {
         await removeFromHeraldsFirefly(userId, column, ids);
@@ -625,9 +583,6 @@ export const deleteFireflyItems = async (req, res) => {
   }
 };
 
-/**
- * GET /api/firefly/items/:type/:id/export
- */
 export const exportFireflyItem = async (req, res) => {
   try {
     const userId = req.user?.id;
@@ -661,23 +616,10 @@ export const exportFireflyItem = async (req, res) => {
   }
 };
 
-/**
- * GET /api/firefly/types
- * Return daftar type yang diizinkan.
- */
 export const getFireflyTypes = async (req, res) => {
   return res.status(200).json({ success: true, types: ALLOWED_TYPES });
 };
 
-// ==========================================
-// HOMEBREW CONTROLLERS
-// ==========================================
-
-/**
- * POST /api/firefly/homebrew/import
- * Import homebrew items. Sama seperti import biasa tapi masuk ke tabel *_homebrew
- * dan otomatis catat di heralds_firefly.
- */
 export const importHomebrewItems = async (req, res) => {
   try {
     const userId = req.user?.id;
@@ -696,13 +638,11 @@ export const importHomebrewItems = async (req, res) => {
       return res.status(400).json({ success: false, message: "No items to import" });
     }
 
-    // Reuse filterAndGroupItems — tapi hanya terima homebrew types
     const { grouped, rejected } = filterAndGroupItems(rawItems);
 
     let totalInserted = 0;
     const results = {};
 
-    // Insert ke homebrew tables + catat di heralds_firefly
     if (grouped.weapon?.length) {
       const inserted = await bulkInsertHomebrewWeapons(grouped.weapon, userId, userName);
       results.weapon = inserted.length;
@@ -775,10 +715,6 @@ export const importHomebrewItems = async (req, res) => {
   }
 };
 
-/**
- * GET /api/firefly/homebrew/items
- * List homebrew items milik user. Query: ?type=weapon&search=sword&limit=50&offset=0
- */
 export const listHomebrewItems = async (req, res) => {
   try {
     const userId = req.user?.id;
@@ -800,9 +736,6 @@ export const listHomebrewItems = async (req, res) => {
   }
 };
 
-/**
- * GET /api/firefly/homebrew/items/:type/:id
- */
 export const getHomebrewItem = async (req, res) => {
   try {
     const userId = req.user?.id;
@@ -823,11 +756,6 @@ export const getHomebrewItem = async (req, res) => {
   }
 };
 
-/**
- * POST /api/firefly/homebrew/delete
- * Body: { type: "weapon", ids: ["uuid1", "uuid2"] }
- * Hapus dari tabel homebrew + hapus dari heralds_firefly
- */
 export const deleteHomebrewItems = async (req, res) => {
   try {
     const userId = req.user?.id;
@@ -844,7 +772,6 @@ export const deleteHomebrewItems = async (req, res) => {
 
     await deleteHomebrewItemsByIds(type, ids, userId);
 
-    // Hapus juga dari heralds_firefly
     const column = TYPE_TO_FIREFLY_COLUMN[type];
     if (column) {
       await removeFromHeraldsFirefly(userId, column, ids);
@@ -857,10 +784,6 @@ export const deleteHomebrewItems = async (req, res) => {
   }
 };
 
-/**
- * GET /api/firefly/homebrew/collection
- * Get heralds_firefly data milik user (ringkasan semua homebrew items)
- */
 export const getHomebrewCollection = async (req, res) => {
   try {
     const userId = req.user?.id;
@@ -868,7 +791,7 @@ export const getHomebrewCollection = async (req, res) => {
 
     const { data, error } = await getHeraldsFireflyByUserId(userId);
     if (error && error.code === "PGRST116") {
-      // Belum ada, return empty
+
       return res.status(200).json({
         success: true,
         collection: { weapons: [], spells: [], consumables: [], containers: [], equipments: [], feats: [], loots: [], tools: [] },
@@ -883,17 +806,10 @@ export const getHomebrewCollection = async (req, res) => {
   }
 };
 
-/**
- * GET /api/firefly/homebrew/types
- */
 export const getHomebrewTypes = async (req, res) => {
   return res.status(200).json({ success: true, types: HOMEBREW_TYPES });
 };
 
-/**
- * GET /api/firefly/homebrew/usage
- * Hitung total storage yang dipakai homebrew items user (JSON size)
- */
 export const getHomebrewUsage = async (req, res) => {
   try {
     const userId = req.user?.id;
@@ -917,11 +833,6 @@ export const getHomebrewUsage = async (req, res) => {
   }
 };
 
-/**
- * GET /api/firefly/admin/homebrew
- * Admin only: list ALL homebrew items dari semua user
- * Query: ?type=weapon&search=sword&limit=200&offset=0&user_id=xxx
- */
 export const adminListAllHomebrew = async (req, res) => {
   try {
     const userRole = req.user?.role;
@@ -932,7 +843,6 @@ export const adminListAllHomebrew = async (req, res) => {
     const { type, search, limit = 200, offset = 0, user_id } = req.query;
     let items = await listAllHomebrewItems({ type, search, limit: Number(limit), offset: Number(offset) });
 
-    // Filter by user_id if provided
     if (user_id) {
       items = items.filter((i) => i.user_id === user_id);
     }

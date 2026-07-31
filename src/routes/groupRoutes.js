@@ -1,7 +1,7 @@
 import express from "express";
 import { verifyToken } from "../middlewares/authMiddleware.js";
-import { 
-  getGroupById, 
+import {
+  getGroupById,
   getGroupByShareCode,
   getUserGroups,
   createGroup,
@@ -24,47 +24,34 @@ const router = express.Router();
 
 router.use(verifyToken);
 
-// List user's groups
 router.get("/", getUserGroups);
 
-// List all Tarot Cards
 router.get("/tarot-cards", listTarotCards);
 
-// Create group
 router.post("/", createGroup);
 
-// Join group
 router.post("/join", joinGroup);
 
-// Leave group
 router.post("/:id/leave", leaveGroup);
 
-// Delete group
 router.delete("/:id", deleteGroup);
 
-// Update group (settings / custom roles)
 router.patch("/:id", updateGroup);
 
-// Kick member
 router.post("/:id/kick/:memberUserId", kickMember);
 
-// Member role update
 router.post("/:id/members/:memberUserId/role", updateMemberRole);
 
-// Group resources (characters, NPCs, journals)
 router.post("/:id/resources", addGroupResource);
 router.patch("/:id/resources/:resourceId", updateGroupResource);
 router.delete("/:id/resources/:resourceId", deleteGroupResource);
 
-// Group missions
 router.post("/:id/missions", addMission);
 router.patch("/:id/missions/:missionId", updateMission);
 router.delete("/:id/missions/:missionId", deleteMission);
 
-// Get group by ID
 router.get("/:id", getGroupById);
 
-// Get group by share code
 router.get("/share/:code", getGroupByShareCode);
 
 export default router;

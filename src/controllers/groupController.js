@@ -1,6 +1,5 @@
 import supabase from "../utils/db.js";
 
-// Helper: Generate unique 12-digit Silane Group ID
 const generateSilaneGroupId = () => {
   const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
   let code = "";
@@ -10,7 +9,6 @@ const generateSilaneGroupId = () => {
   return code;
 };
 
-// Helper: Generate 6-digit random Share Code
 const generateShareCode = () => {
   const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
   let code = "";
@@ -20,7 +18,6 @@ const generateShareCode = () => {
   return code;
 };
 
-// Helper: Generate unique Mission ID
 const generateMissionId = () => {
   return `m_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 };
@@ -209,7 +206,6 @@ export const joinGroup = async (req, res) => {
     const cleanCode = String(code || "").trim();
     if (!cleanCode) return res.status(400).json({ success: false, message: "Invite code is required" });
 
-    // Find group by share_code or silane_group_id
     const { data: group, error: fetchErr } = await supabase
       .from("groups")
       .select("*")
@@ -219,7 +215,6 @@ export const joinGroup = async (req, res) => {
     if (fetchErr) throw fetchErr;
     if (!group) return res.status(404).json({ success: false, message: "Group not found" });
 
-    // Verify password if group requires one
     if (group.password) {
       if (String(password || "").trim() !== String(group.password).trim()) {
         return res.status(403).json({ success: false, message: "Invalid password" });
@@ -732,17 +727,18 @@ export const updateGroupResource = async (req, res) => {
     if (!userId) return res.status(401).json({ success: false, message: "Unauthorized" });
 
     const { id: groupId, resourceId } = req.params;
-    const { visibility, hidden, tarot_ids, active } = req.body;
+    const { visibility, hidden, tarot_ids, active, allowed_user_ids } = req.body || {};
 
     const wantsVisibility = visibility !== undefined;
     const wantsHidden = hidden !== undefined;
     const wantsTarot = Array.isArray(tarot_ids);
     const wantsActive = active !== undefined;
+    const wantsAllowedUsers = Array.isArray(allowed_user_ids);
 
-    if (!wantsVisibility && !wantsHidden && !wantsTarot && !wantsActive) {
+    if (!wantsVisibility && !wantsHidden && !wantsTarot && !wantsActive && !wantsAllowedUsers) {
       return res.status(400).json({
         success: false,
-        message: "Nothing to update. Provide 'visibility', 'hidden', 'tarot_ids', or 'active'."
+        message: "Nothing to update. Provide 'visibility', 'hidden', 'tarot_ids', 'active', or 'allowed_user_ids'."
       });
     }
 
@@ -757,7 +753,6 @@ export const updateGroupResource = async (req, res) => {
       throw fetchErr;
     }
 
-    // Check membership
     const members = Array.isArray(group.members) ? group.members : [];
     const isCreator = String(group.creator_id) === String(userId);
     const isMember = isCreator || members.some(m => String(m.user_id) === String(userId));
@@ -774,7 +769,6 @@ export const updateGroupResource = async (req, res) => {
     const target = resources[idx];
     const isOwner = String(target.owner_id) === String(userId);
 
-    // Permission check: only Creator or Resource Owner can modify
     if (!isCreator && !isOwner) {
       return res.status(403).json({ success: false, message: "No permission to modify this resource" });
     }
@@ -786,6 +780,7 @@ export const updateGroupResource = async (req, res) => {
       if (wantsHidden) patch.hidden = Boolean(hidden);
       if (wantsTarot) patch.tarot_ids = tarot_ids;
       if (wantsActive) patch.active = Boolean(active);
+      if (wantsAllowedUsers) patch.allowed_user_ids = allowed_user_ids;
       return patch;
     });
 
@@ -807,4 +802,3 @@ export const updateGroupResource = async (req, res) => {
     return res.status(500).json({ success: false, message: "Failed to update resource" });
   }
 };
-

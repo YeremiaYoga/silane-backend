@@ -1,13 +1,5 @@
 import supabase from "../utils/db.js";
 
-// ==========================================
-// FIREFLY MODEL
-// Menggunakan tabel yang SUDAH ADA di Supabase (sama dengan admin project-ignite).
-// Tabel: foundry_consumables, foundry_containers, foundry_equipments,
-//        foundry_feats, foundry_features, foundry_loots, foundry_spells,
-//        foundry_tools, foundry_weapons
-// ==========================================
-
 const TABLES = [
   { key: "consumable", table: "foundry_consumables" },
   { key: "container", table: "foundry_containers" },
@@ -20,10 +12,6 @@ const TABLES = [
   { key: "weapon", table: "foundry_weapons" },
 ];
 
-// ==========================================
-// HOMEBREW TABLES — duplicate dari foundry_* tapi per-user
-// ==========================================
-
 const HOMEBREW_TABLES = [
   { key: "consumable", table: "consumables_homebrew" },
   { key: "container", table: "containers_homebrew" },
@@ -34,32 +22,21 @@ const HOMEBREW_TABLES = [
   { key: "tool", table: "tools_homebrew" },
   { key: "weapon", table: "weapons_homebrew" },
 ];
-
 export const getHomebrewTableByType = (type) => {
   return HOMEBREW_TABLES.find((t) => t.key === String(type).toLowerCase()) || null;
 };
-
 export const getHomebrewValidTypes = () => HOMEBREW_TABLES.map((t) => t.key);
-
 export const isValidHomebrewType = (type) => {
   return HOMEBREW_TABLES.some((t) => t.key === String(type).toLowerCase());
 };
-
 export const getValidTypes = () => TABLES.map((t) => t.key);
-
 export const isValidFireflyType = (type) => {
   return TABLES.some((t) => t.key === String(type).toLowerCase());
 };
-
 export const getTableByType = (type) => {
   return TABLES.find((t) => t.key === String(type).toLowerCase()) || null;
 };
-
 export const getAllTables = () => TABLES;
-
-// ==========================================
-// BULK INSERT — per type, kolom disesuaikan persis seperti admin
-// ==========================================
 
 export const bulkInsertWeapons = async (items) => {
   if (!items?.length) return [];
@@ -83,12 +60,10 @@ export const bulkInsertWeapons = async (items) => {
     raw_data: it.raw_data ?? {},
     format_data: it.format_data ?? {},
   }));
-
   const { data, error } = await supabase.from("foundry_weapons").insert(mapped).select();
   if (error) { console.error("❌ bulkInsertWeapons error:", error.message); throw error; }
   return data || [];
 };
-
 export const bulkInsertConsumables = async (items) => {
   if (!items?.length) return [];
   const mapped = items.map((it) => ({
@@ -107,12 +82,10 @@ export const bulkInsertConsumables = async (items) => {
     raw_data: it.raw_data ?? {},
     format_data: it.format_data ?? {},
   }));
-
   const { data, error } = await supabase.from("foundry_consumables").insert(mapped).select();
   if (error) { console.error("❌ bulkInsertConsumables error:", error.message); throw error; }
   return data || [];
 };
-
 export const bulkInsertContainers = async (items) => {
   if (!items?.length) return [];
   const mapped = items.map((it) => ({
@@ -129,12 +102,10 @@ export const bulkInsertContainers = async (items) => {
     raw_data: it.raw_data ?? {},
     format_data: it.format_data ?? {},
   }));
-
   const { data, error } = await supabase.from("foundry_containers").insert(mapped).select();
   if (error) { console.error("❌ bulkInsertContainers error:", error.message); throw error; }
   return data || [];
 };
-
 export const bulkInsertEquipments = async (items) => {
   if (!items?.length) return [];
   const mapped = items.map((it) => ({
@@ -153,12 +124,10 @@ export const bulkInsertEquipments = async (items) => {
     raw_data: it.raw_data ?? {},
     format_data: it.format_data ?? {},
   }));
-
   const { data, error } = await supabase.from("foundry_equipments").insert(mapped).select();
   if (error) { console.error("❌ bulkInsertEquipments error:", error.message); throw error; }
   return data || [];
 };
-
 export const bulkInsertLoots = async (items) => {
   if (!items?.length) return [];
   const mapped = items.map((it) => ({
@@ -176,12 +145,10 @@ export const bulkInsertLoots = async (items) => {
     raw_data: it.raw_data ?? {},
     format_data: it.format_data ?? {},
   }));
-
   const { data, error } = await supabase.from("foundry_loots").insert(mapped).select();
   if (error) { console.error("❌ bulkInsertLoots error:", error.message); throw error; }
   return data || [];
 };
-
 export const bulkInsertTools = async (items) => {
   if (!items?.length) return [];
   const mapped = items.map((it) => ({
@@ -200,12 +167,10 @@ export const bulkInsertTools = async (items) => {
     raw_data: it.raw_data ?? {},
     format_data: it.format_data ?? {},
   }));
-
   const { data, error } = await supabase.from("foundry_tools").insert(mapped).select();
   if (error) { console.error("❌ bulkInsertTools error:", error.message); throw error; }
   return data || [];
 };
-
 export const bulkInsertSpells = async (items) => {
   if (!items?.length) return [];
   const mapped = items.map((it) => ({
@@ -237,12 +202,10 @@ export const bulkInsertSpells = async (items) => {
     species: it.species ?? [],
     subspecies: it.subspecies ?? [],
   }));
-
   const { data, error } = await supabase.from("foundry_spells").insert(mapped).select();
   if (error) { console.error("❌ bulkInsertSpells error:", error.message); throw error; }
   return data || [];
 };
-
 export const bulkInsertFeats = async (items) => {
   if (!items?.length) return [];
   const mapped = items.map((it) => ({
@@ -260,7 +223,6 @@ export const bulkInsertFeats = async (items) => {
     format_data: it.format_data ?? {},
     updated_at: new Date().toISOString(),
   }));
-
   const { data, error } = await supabase
     .from("foundry_feats")
     .insert(mapped)
@@ -268,7 +230,6 @@ export const bulkInsertFeats = async (items) => {
   if (error) { console.error("❌ bulkInsertFeats error:", error.message); throw error; }
   return data || [];
 };
-
 export const bulkInsertFeatures = async (items) => {
   if (!items?.length) return [];
   const mapped = items.map((it) => ({
@@ -285,76 +246,54 @@ export const bulkInsertFeatures = async (items) => {
     requirements: it.requirements ?? null,
     uses: it.uses ?? {},
   }));
-
   const { data, error } = await supabase.from("foundry_features").insert(mapped).select();
   if (error) { console.error("❌ bulkInsertFeatures error:", error.message); throw error; }
   return data || [];
 };
 
-// ==========================================
-// READ — generic query ke tabel yang sesuai
-// ==========================================
-
 export const listItemsByType = async (type, { search, limit = 50, offset = 0 } = {}) => {
   const tableInfo = getTableByType(type);
   if (!tableInfo) throw new Error(`Invalid type: ${type}`);
-
   let query = supabase
     .from(tableInfo.table)
     .select("*")
     .order("created_at", { ascending: false });
-
   if (search) {
     query = query.ilike("name", `%${search}%`);
   }
-
   query = query.range(offset, offset + limit - 1);
-
   const { data, error } = await query;
   if (error) { console.error(`❌ listItemsByType (${tableInfo.table}) error:`, error.message); throw error; }
   return data || [];
 };
-
 export const listItemsAllTypes = async ({ search, limit = 100 } = {}) => {
   let allItems = [];
-
   for (const t of TABLES) {
     let query = supabase.from(t.table).select("*");
     if (search) query = query.ilike("name", `%${search}%`);
-
     const { data, error } = await query;
     if (error) { console.error(`❌ listItemsAllTypes (${t.table}) error:`, error.message); continue; }
-
     const mapped = (data || []).map((row) => ({ ...row, __type: t.key, __table: t.table }));
     allItems = allItems.concat(mapped);
   }
-
   allItems.sort((a, b) => (a.name || "").localeCompare(b.name || ""));
   if (limit) allItems = allItems.slice(0, Number(limit));
   return allItems;
 };
-
 export const getItemById = async (type, id) => {
   const tableInfo = getTableByType(type);
   if (!tableInfo) throw new Error(`Invalid type: ${type}`);
-
   const { data, error } = await supabase.from(tableInfo.table).select("*").eq("id", id).single();
   if (error) { console.error(`❌ getItemById (${tableInfo.table}) error:`, error.message); throw error; }
   return data;
 };
-
 export const deleteItemsByIds = async (type, ids) => {
   const tableInfo = getTableByType(type);
   if (!tableInfo) throw new Error(`Invalid type: ${type}`);
-
   const { error } = await supabase.from(tableInfo.table).delete().in("id", ids);
   if (error) { console.error(`❌ deleteItemsByIds (${tableInfo.table}) error:`, error.message); throw error; }
   return true;
 };
-
-// ==========================================
-// HOMEBREW BULK INSERT — sama seperti foundry_* tapi + user_id, user_name
-// ==========================================
 
 export const bulkInsertHomebrewWeapons = async (items, userId, userName) => {
   if (!items?.length) return [];
@@ -384,7 +323,6 @@ export const bulkInsertHomebrewWeapons = async (items, userId, userName) => {
   if (error) { console.error("❌ bulkInsertHomebrewWeapons error:", error.message); throw error; }
   return data || [];
 };
-
 export const bulkInsertHomebrewConsumables = async (items, userId, userName) => {
   if (!items?.length) return [];
   const mapped = items.map((it) => ({
@@ -409,7 +347,6 @@ export const bulkInsertHomebrewConsumables = async (items, userId, userName) => 
   if (error) { console.error("❌ bulkInsertHomebrewConsumables error:", error.message); throw error; }
   return data || [];
 };
-
 export const bulkInsertHomebrewContainers = async (items, userId, userName) => {
   if (!items?.length) return [];
   const mapped = items.map((it) => ({
@@ -432,7 +369,6 @@ export const bulkInsertHomebrewContainers = async (items, userId, userName) => {
   if (error) { console.error("❌ bulkInsertHomebrewContainers error:", error.message); throw error; }
   return data || [];
 };
-
 export const bulkInsertHomebrewEquipments = async (items, userId, userName) => {
   if (!items?.length) return [];
   const mapped = items.map((it) => ({
@@ -457,7 +393,6 @@ export const bulkInsertHomebrewEquipments = async (items, userId, userName) => {
   if (error) { console.error("❌ bulkInsertHomebrewEquipments error:", error.message); throw error; }
   return data || [];
 };
-
 export const bulkInsertHomebrewLoots = async (items, userId, userName) => {
   if (!items?.length) return [];
   const mapped = items.map((it) => ({
@@ -481,7 +416,6 @@ export const bulkInsertHomebrewLoots = async (items, userId, userName) => {
   if (error) { console.error("❌ bulkInsertHomebrewLoots error:", error.message); throw error; }
   return data || [];
 };
-
 export const bulkInsertHomebrewTools = async (items, userId, userName) => {
   if (!items?.length) return [];
   const mapped = items.map((it) => ({
@@ -507,7 +441,6 @@ export const bulkInsertHomebrewTools = async (items, userId, userName) => {
   if (error) { console.error("❌ bulkInsertHomebrewTools error:", error.message); throw error; }
   return data || [];
 };
-
 export const bulkInsertHomebrewSpells = async (items, userId, userName) => {
   if (!items?.length) return [];
   const mapped = items.map((it) => ({
@@ -541,7 +474,6 @@ export const bulkInsertHomebrewSpells = async (items, userId, userName) => {
   if (error) { console.error("❌ bulkInsertHomebrewSpells error:", error.message); throw error; }
   return data || [];
 };
-
 export const bulkInsertHomebrewFeats = async (items, userId, userName) => {
   if (!items?.length) return [];
   const mapped = items.map((it) => ({
@@ -565,28 +497,20 @@ export const bulkInsertHomebrewFeats = async (items, userId, userName) => {
   return data || [];
 };
 
-// ==========================================
-// HOMEBREW READ / DELETE
-// ==========================================
-
 export const listHomebrewItemsByType = async (type, userId, { search, limit = 50, offset = 0 } = {}) => {
   const tableInfo = getHomebrewTableByType(type);
   if (!tableInfo) throw new Error(`Invalid homebrew type: ${type}`);
-
   let query = supabase
     .from(tableInfo.table)
     .select("*")
     .eq("user_id", userId)
     .order("created_at", { ascending: false });
-
   if (search) query = query.ilike("name", `%${search}%`);
   query = query.range(offset, offset + limit - 1);
-
   const { data, error } = await query;
   if (error) { console.error(`❌ listHomebrewItemsByType (${tableInfo.table}) error:`, error.message); throw error; }
   return data || [];
 };
-
 export const listHomebrewAllTypes = async (userId, { search, limit = 100 } = {}) => {
   let allItems = [];
   for (const t of HOMEBREW_TABLES) {
@@ -601,10 +525,6 @@ export const listHomebrewAllTypes = async (userId, { search, limit = 100 } = {})
   if (limit) allItems = allItems.slice(0, Number(limit));
   return allItems;
 };
-
-/**
- * Admin: list ALL homebrew items across all users
- */
 export const listAllHomebrewItems = async ({ search, limit = 200, offset = 0, type } = {}) => {
   if (type) {
     const tableInfo = getHomebrewTableByType(type);
@@ -616,7 +536,6 @@ export const listAllHomebrewItems = async ({ search, limit = 200, offset = 0, ty
     if (error) { console.error(`❌ listAllHomebrewItems (${tableInfo.table}) error:`, error.message); throw error; }
     return (data || []).map((row) => ({ ...row, __type: type, __table: tableInfo.table }));
   }
-
   let allItems = [];
   for (const t of HOMEBREW_TABLES) {
     let query = supabase.from(t.table).select("*");
@@ -630,7 +549,6 @@ export const listAllHomebrewItems = async ({ search, limit = 200, offset = 0, ty
   if (limit) allItems = allItems.slice(0, Number(limit));
   return allItems;
 };
-
 export const getHomebrewItemById = async (type, id, userId) => {
   const tableInfo = getHomebrewTableByType(type);
   if (!tableInfo) throw new Error(`Invalid homebrew type: ${type}`);
@@ -638,7 +556,6 @@ export const getHomebrewItemById = async (type, id, userId) => {
   if (error) { console.error(`❌ getHomebrewItemById (${tableInfo.table}) error:`, error.message); throw error; }
   return data;
 };
-
 export const deleteHomebrewItemsByIds = async (type, ids, userId) => {
   const tableInfo = getHomebrewTableByType(type);
   if (!tableInfo) throw new Error(`Invalid homebrew type: ${type}`);
@@ -647,12 +564,6 @@ export const deleteHomebrewItemsByIds = async (type, ids, userId) => {
   return true;
 };
 
-// ==========================================
-// HERALDS_FIREFLY TABLE — koleksi item homebrew per user
-// Kolom JSONB: weapons, spells, consumables, containers, equipments, feats, loots, tools
-// Setiap entry: { id, name, image }
-// ==========================================
-
 export const getHeraldsFireflyByUserId = async (userId) => {
   return await supabase
     .from("heralds_firefly")
@@ -660,7 +571,6 @@ export const getHeraldsFireflyByUserId = async (userId) => {
     .eq("user_id", userId)
     .single();
 };
-
 export const createHeraldsFirefly = async (data) => {
   return await supabase
     .from("heralds_firefly")
@@ -668,7 +578,6 @@ export const createHeraldsFirefly = async (data) => {
     .select("*")
     .single();
 };
-
 export const updateHeraldsFireflyByUserId = async (userId, updateData) => {
   const dataToUpdate = {
     ...updateData,
@@ -681,18 +590,8 @@ export const updateHeraldsFireflyByUserId = async (userId, updateData) => {
     .select("*")
     .single();
 };
-
-/**
- * Append items ke kolom JSONB tertentu di heralds_firefly
- * @param {string} userId
- * @param {string} column - weapons, spells, consumables, etc.
- * @param {Array} newEntries - [{ id, name, image }, ...]
- */
 export const appendToHeraldsFirefly = async (userId, column, newEntries) => {
-  // Ambil data existing
   const { data: existing, error: fetchErr } = await getHeraldsFireflyByUserId(userId);
-  
-  // Kalau belum ada row, buat dulu
   if (fetchErr && fetchErr.code === "PGRST116") {
     const newRow = {
       user_id: userId,
@@ -715,40 +614,29 @@ export const appendToHeraldsFirefly = async (userId, column, newEntries) => {
     if (error) { console.error(`❌ appendToHeraldsFirefly create error:`, error.message); throw error; }
     return data;
   }
-  
   if (fetchErr) throw fetchErr;
-
   const currentArray = existing?.[column] || [];
   const merged = [...currentArray, ...newEntries];
-
   const { data, error } = await supabase
     .from("heralds_firefly")
     .update({ [column]: merged, updated_at: new Date().toISOString() })
     .eq("user_id", userId)
     .select("*")
     .single();
-
   if (error) { console.error(`❌ appendToHeraldsFirefly (${column}) error:`, error.message); throw error; }
   return data;
 };
-
-/**
- * Remove items dari kolom JSONB di heralds_firefly berdasarkan id
- */
 export const removeFromHeraldsFirefly = async (userId, column, idsToRemove) => {
   const { data: existing, error: fetchErr } = await getHeraldsFireflyByUserId(userId);
   if (fetchErr) throw fetchErr;
-
   const currentArray = existing?.[column] || [];
   const filtered = currentArray.filter((entry) => !idsToRemove.includes(entry.id));
-
   const { data, error } = await supabase
     .from("heralds_firefly")
     .update({ [column]: filtered, updated_at: new Date().toISOString() })
     .eq("user_id", userId)
     .select("*")
     .single();
-
   if (error) { console.error(`❌ removeFromHeraldsFirefly (${column}) error:`, error.message); throw error; }
   return data;
 };

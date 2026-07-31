@@ -1,16 +1,13 @@
 import supabase from "../utils/db.js";
-
 export const getAllHeraldSilanes = async () => {
   return await supabase
     .from("herald_silane")
     .select("*")
     .order("created_at", { ascending: false });
 };
-
 export const getHeraldSilaneById = async (id) => {
   return await supabase.from("herald_silane").select("*").eq("id", id).single();
 };
-
 export const getHeraldSilaneByUserId = async (userId) => {
   return await supabase
     .from("herald_silane")
@@ -18,7 +15,6 @@ export const getHeraldSilaneByUserId = async (userId) => {
     .eq("user_id", userId)
     .single();
 };
-
 export const createHeraldSilane = async (data) => {
   return await supabase
     .from("herald_silane")
@@ -26,13 +22,11 @@ export const createHeraldSilane = async (data) => {
     .select("*")
     .single();
 };
-
 export const updateHeraldSilane = async (id, updateData) => {
   const dataToUpdate = {
     ...updateData,
     updated_at: new Date().toISOString(),
   };
-
   return await supabase
     .from("herald_silane")
     .update(dataToUpdate)
@@ -40,13 +34,11 @@ export const updateHeraldSilane = async (id, updateData) => {
     .select("*")
     .single();
 };
-
 export const updateHeraldSilaneByUserId = async (userId, updateData) => {
   const dataToUpdate = {
     ...updateData,
     updated_at: new Date().toISOString(),
   };
-
   return await supabase
     .from("herald_silane")
     .update(dataToUpdate)
@@ -54,21 +46,17 @@ export const updateHeraldSilaneByUserId = async (userId, updateData) => {
     .select("*")
     .single();
 };
-
 export const deleteHeraldSilane = async (id) => {
   return await supabase.from("herald_silane").delete().eq("id", id);
 };
-
 export const insertSilaneMedia = async (type, data) => {
   const tableName = type === "images" ? "silane_image" : `silane_${type}`;
   return await supabase.from(tableName).insert([data]).select("*").single();
 };
-
 export const getSilaneMediaByIds = async (type, ids) => {
   const tableName = type === "images" ? "silane_image" : `silane_${type}`;
   return await supabase.from(tableName).select("uuid, link").in("uuid", ids);
 };
-
 export const upsertSilaneVisage = async (profilesData) => {
   if (!profilesData || profilesData.length === 0) return { data: [] };
   return await supabase
@@ -76,12 +64,10 @@ export const upsertSilaneVisage = async (profilesData) => {
     .upsert(profilesData, { onConflict: "id" })
     .select();
 };
-
 export const getSilaneVisageByIds = async (ids) => {
   if (!ids || ids.length === 0) return { data: [] };
   return await supabase.from("silane_visage").select("*").in("id", ids);
 };
-
 export const deleteOrphanedVisageProfiles = async (
   userId,
   activeProfileIds,
@@ -89,22 +75,16 @@ export const deleteOrphanedVisageProfiles = async (
   if (!activeProfileIds || activeProfileIds.length === 0) {
     return await supabase.from("silane_visage").delete().eq("user_id", userId);
   }
-
   return await supabase
     .from("silane_visage")
     .delete()
     .eq("user_id", userId)
     .not("id", "in", `(${activeProfileIds.join(",")})`);
 };
-
 export const deleteSilaneMediaByIds = async (type, ids) => {
   const tableName = type === "images" ? "silane_image" : `silane_${type}`;
   return await supabase.from(tableName).delete().in("uuid", ids);
 };
-
-// ==========================================
-// CHARACTER MODELS
-// ==========================================
 
 export const upsertSilaneCharacter = async (profilesData) => {
   if (!profilesData || profilesData.length === 0) return { data: [] };
@@ -113,12 +93,10 @@ export const upsertSilaneCharacter = async (profilesData) => {
     .upsert(profilesData, { onConflict: "id" })
     .select();
 };
-
 export const getSilaneCharacterByIds = async (ids) => {
   if (!ids || ids.length === 0) return { data: [] };
   return await supabase.from("silane_characters").select("*").in("id", ids);
 };
-
 export const deleteOrphanedCharacterProfiles = async (
   userId,
   activeProfileIds,
@@ -129,7 +107,6 @@ export const deleteOrphanedCharacterProfiles = async (
       .delete()
       .eq("user_id", userId);
   }
-
   return await supabase
     .from("silane_characters")
     .delete()
@@ -137,14 +114,9 @@ export const deleteOrphanedCharacterProfiles = async (
     .not("id", "in", `(${activeProfileIds.join(",")})`);
 };
 
-// ==========================================
-// AUDIO MODELS
-// ==========================================
-
 export const getAllHeraldSilaneAudio = async () => {
   return await supabase.from("herald_silane").select("user_id, audio");
 };
-
 export const getSilanePlaylistsByAlbumIds = async (albumIds) => {
   if (!albumIds || albumIds.length === 0) return { data: [] };
   return await supabase
@@ -152,7 +124,6 @@ export const getSilanePlaylistsByAlbumIds = async (albumIds) => {
     .select("*")
     .in("album_id", albumIds);
 };
-
 export const upsertSilanePlaylists = async (playlistsData) => {
   if (!playlistsData || playlistsData.length === 0) return { data: [] };
   return await supabase
@@ -160,7 +131,6 @@ export const upsertSilanePlaylists = async (playlistsData) => {
     .upsert(playlistsData, { onConflict: "uuid" })
     .select();
 };
-
 export const deleteOrphanedPlaylists = async (
   activeAlbumIds,
   activePlaylistUuids,
@@ -172,23 +142,19 @@ export const deleteOrphanedPlaylists = async (
       .delete()
       .in("album_id", activeAlbumIds);
   }
-
   return await supabase
     .from("silane_audio")
     .delete()
     .in("album_id", activeAlbumIds)
     .not("uuid", "in", `(${activePlaylistUuids.join(",")})`);
 };
-
 export const updateSilaneMedia = async (type, uuid, updateData) => {
   const tableName = type === "images" ? "silane_image" : `silane_${type}`;
   return await supabase.from(tableName).update(updateData).eq("uuid", uuid).select("*").single();
 };
-
 export const insertCharacterBackup = async (data) => {
   return await supabase.from("foundry_characters_backup").insert([data]).select("*").single();
 };
-
 export const getCharacterBackupsByUserId = async (userId) => {
   return await supabase
     .from("foundry_characters_backup")
@@ -196,7 +162,6 @@ export const getCharacterBackupsByUserId = async (userId) => {
     .eq("user_id", userId)
     .order("created_at", { ascending: false });
 };
-
 export const getCharacterBackupById = async (id, userId) => {
   return await supabase
     .from("foundry_characters_backup")
@@ -205,7 +170,6 @@ export const getCharacterBackupById = async (id, userId) => {
     .eq("user_id", userId)
     .single();
 };
-
 export const deleteCharacterBackupById = async (id, userId) => {
   return await supabase
     .from("foundry_characters_backup")
@@ -213,15 +177,12 @@ export const deleteCharacterBackupById = async (id, userId) => {
     .eq("id", id)
     .eq("user_id", userId);
 };
-
 export const getCharacterBackupsSizeByUserId = async (userId) => {
   const { data, error } = await supabase
     .from("foundry_characters_backup")
     .select("actor_data")
     .eq("user_id", userId);
-  
   if (error) throw error;
-  
   let totalBytes = 0;
   if (data) {
     for (const row of data) {

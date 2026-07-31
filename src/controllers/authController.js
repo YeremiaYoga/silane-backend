@@ -12,36 +12,25 @@ import {
   getHeraldsFireflyByUserId,
   createHeraldsFirefly
 } from "../models/fireflyModel.js";
-
 const generatePublicId = () => crypto.randomBytes(8).toString("hex");
 
-// Global map to hold pending authentications for polling
 export const pendingAuths = new Map();
-
 export const pollAuthStatus = (req, res) => {
   const { temp_id } = req.query;
   if (!temp_id) return res.status(400).json({ error: "Missing temp_id" });
-
   if (pendingAuths.has(temp_id)) {
     const authData = pendingAuths.get(temp_id);
-    pendingAuths.delete(temp_id); // Clean up
+    pendingAuths.delete(temp_id);
     return res.json({ status: "success", ...authData });
   }
-
   return res.json({ status: "pending" });
 };
-
 export const loginFoundry = async (req, res, next) => {
   try {
     const { secretId } = req.body;
-
     if (!secretId) {
       return res.status(400).json({ success: false, message: "Secret ID is required!" });
     }
-
-    // ==========================================
-    // ADMIN LOGIN — cek apakah secretId = ADMIN_LOGIN_CODE di .env
-    // ==========================================
     const adminCode = process.env.ADMIN_LOGIN_CODE;
     if (adminCode && secretId === adminCode) {
       const adminId = "00000000-0000-0000-0000-000000000000";
@@ -50,7 +39,6 @@ export const loginFoundry = async (req, res, next) => {
         process.env.JWT_SECRET,
         { expiresIn: "30d" }
       );
-
       return res.json({
         success: true,
         message: "Admin login successful",
@@ -64,21 +52,17 @@ export const loginFoundry = async (req, res, next) => {
         },
       });
     }
-
     let user = null;
     if (secretId && secretId.length === 16) {
       user = await getUserBySilaneId(secretId);
     }
-    
     if (!user) {
       const hashedAttempt = createLoginHash(secretId);
       user = await getUserByLoginHash(hashedAttempt);
     }
-
     if (!user) {
       return res.status(401).json({ success: false, message: "Invalid Secret ID or Silane ID." });
     }
-
     let { data: silaneData, error: fetchError } = await getHeraldSilaneByUserId(user.id);
     if (fetchError && fetchError.code === "PGRST116") {
       const newData = {
@@ -94,8 +78,6 @@ export const loginFoundry = async (req, res, next) => {
     } else if (fetchError) {
       throw fetchError;
     }
-
-    // Auto-create heralds_firefly row jika belum ada
     let { data: fireflyData, error: fireflyError } = await getHeraldsFireflyByUserId(user.id);
     if (fireflyError && fireflyError.code === "PGRST116") {
       const newFireflyData = {
@@ -114,13 +96,11 @@ export const loginFoundry = async (req, res, next) => {
     } else if (fireflyError) {
       throw fireflyError;
     }
-
     const token = jwt.sign(
       { id: user.id, username: user.username, role: user.role },
       process.env.JWT_SECRET,
       { expiresIn: "30d" }
     );
-
     return res.json({
       success: true,
       message: "Successfully logged into Foundry VTT",
@@ -138,32 +118,26 @@ export const loginFoundry = async (req, res, next) => {
     next(error);
   }
 };
-
 export const testLoginGet = async (req, res, next) => {
   try {
     const { secretId } = req.params;
-
     if (!secretId) {
       return res.status(400).json({ success: false, message: "Secret ID is missing from URL!" });
     }
-
     let user = null;
     if (secretId && secretId.length === 16) {
       user = await getUserBySilaneId(secretId);
     }
-    
     if (!user) {
       const hashedAttempt = createLoginHash(secretId);
       user = await getUserByLoginHash(hashedAttempt);
     }
-
     if (!user) {
       return res.status(401).json({
         success: false,
         message: "❌ Failed! ID is incorrect or not found.",
       });
     }
-
     return res.json({
       success: true,
       message: "✅ Login Successful (Test Endpoint)",
@@ -180,9 +154,6 @@ export const testLoginGet = async (req, res, next) => {
   }
 };
 
-// ==========================================
-// CRYPTO & ID HELPERS FOR AUTH
-// ==========================================
 const IV_LENGTH = 16;
 function encryptSecret(text) {
   if (!text) return null;
@@ -196,13 +167,11 @@ function encryptSecret(text) {
   encrypted = Buffer.concat([encrypted, cipher.final()]);
   return iv.toString("hex") + ":" + encrypted.toString("hex");
 }
-
 function decryptSecret(text) {
   if (!text) return null;
   try {
     const textParts = text.split(":");
-    if (textParts.length !== 2) return text; 
-
+    if (textParts.length !== 2) return text;
     const iv = Buffer.from(textParts.shift(), "hex");
     const encryptedText = Buffer.from(textParts.join(":"), "hex");
     const decipher = crypto.createDecipheriv(
@@ -215,10 +184,9 @@ function decryptSecret(text) {
     return decrypted.toString();
   } catch (e) {
     console.error("⚠️ Failed to decrypt secret_id:", e.message);
-    return null; 
+    return null;
   }
 }
-
 async function generateUniqueSilaneId() {
   const chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
   let isUnique = false;
@@ -246,31 +214,22 @@ async function generateUniqueSilaneId() {
   return silaneId;
 }
 
-// ==========================================
-// GOOGLE OAUTH
-// ==========================================
 export const googleLoginInitiate = (req, res) => {
   const { temp_id } = req.query;
   const scopes = [
     "https://www.googleapis.com/auth/userinfo.profile",
     "https://www.googleapis.com/auth/userinfo.email",
   ].join(" ");
-
   const state = temp_id || "guest";
-
   const url = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${process.env.GOOGLE_CLIENT_ID}&redirect_uri=${encodeURIComponent(
     process.env.GOOGLE_REDIRECT_URI
   )}&response_type=code&scope=${encodeURIComponent(scopes)}&access_type=offline&prompt=consent&state=${encodeURIComponent(state)}`;
-
   res.redirect(url);
 };
-
 export const googleLoginCallback = async (req, res, next) => {
   const { code, state } = req.query;
   if (!code) return res.status(400).json({ error: "No code provided" });
-
   try {
-    // 1. Tukar Code dengan Access Token
     const { data: tokenData } = await axios.post(
       "https://oauth2.googleapis.com/token",
       {
@@ -281,44 +240,31 @@ export const googleLoginCallback = async (req, res, next) => {
         redirect_uri: process.env.GOOGLE_REDIRECT_URI,
       }
     );
-
     const { access_token, refresh_token } = tokenData;
-
-    // 2. Ambil Profil dari Google
     const { data: googleUser } = await axios.get(
       "https://www.googleapis.com/oauth2/v2/userinfo",
       {
         headers: { Authorization: `Bearer ${access_token}` },
       }
     );
-
     const email = googleUser.email;
     const fullName = googleUser.name || "Google User";
     const avatarUrl = googleUser.picture || null;
     const googleId = googleUser.id;
-
-    // 3. Cari atau Buat User di Tabel users Supabase
     let { data: user, error: findError } = await supabase
       .from("users")
       .select("*")
       .eq("email", email)
       .maybeSingle();
-
     if (findError) throw findError;
-
     if (!user) {
-      // Buat user baru
       const baseUsername = fullName.replace(/\s+/g, "").toLowerCase();
       const randomSuffix = Math.floor(Math.random() * 1000);
       const username = `${baseUsername}${randomSuffix}`;
-
-      // Generate unique fvtt secret
       const rawSecret = crypto.randomBytes(16).toString("hex");
       const encryptedSecret = encryptSecret(rawSecret);
       const loginHash = createLoginHash(rawSecret);
-
       const silaneId = await generateUniqueSilaneId();
-
       const { data: newUser, error: insertError } = await supabase
         .from("users")
         .insert([
@@ -336,11 +282,9 @@ export const googleLoginCallback = async (req, res, next) => {
         ])
         .select()
         .single();
-
       if (insertError) throw insertError;
       user = newUser;
     } else {
-      // Jika user sudah ada tapi belum memiliki silane_id
       if (!user.silane_id) {
         const silaneId = await generateUniqueSilaneId();
         const { data: updated, error: updateError } = await supabase
@@ -353,14 +297,11 @@ export const googleLoginCallback = async (req, res, next) => {
         user = updated;
       }
     }
-
-    // 4. Hubungkan Google Account (user_google)
     const { data: existingLink } = await supabase
       .from("user_google")
       .select("id")
       .eq("google_id", googleId)
       .maybeSingle();
-
     const googlePayload = {
       user_id: user.id,
       google_id: googleId,
@@ -372,7 +313,6 @@ export const googleLoginCallback = async (req, res, next) => {
       raw_data: googleUser,
       updated_at: new Date().toISOString(),
     };
-
     if (existingLink) {
       await supabase
         .from("user_google")
@@ -381,8 +321,6 @@ export const googleLoginCallback = async (req, res, next) => {
     } else {
       await supabase.from("user_google").insert([googlePayload]);
     }
-
-    // 5. Pastikan Heralds Silane Asset Profile exists
     let { data: silaneData, error: fetchError } = await getHeraldSilaneByUserId(user.id);
     if (fetchError && fetchError.code === "PGRST116") {
       const newData = {
@@ -398,8 +336,6 @@ export const googleLoginCallback = async (req, res, next) => {
     } else if (fetchError) {
       throw fetchError;
     }
-
-    // 6. Pastikan Heralds Firefly exists
     let { data: fireflyData, error: fireflyError } = await getHeraldsFireflyByUserId(user.id);
     if (fireflyError && fireflyError.code === "PGRST116") {
       const newFireflyData = {
@@ -418,14 +354,11 @@ export const googleLoginCallback = async (req, res, next) => {
     } else if (fireflyError) {
       throw fireflyError;
     }
-
-    // 7. Buat JWT Token untuk Silane Backend
     const token = jwt.sign(
-      { id: user.id, username: user.username, role: user.role },
+      { id: user.id, username: user.username, role: user.role, silane_id: user.silane_id },
       process.env.JWT_SECRET,
       { expiresIn: "30d" }
     );
-
     const safeUser = {
       id: user.id,
       username: user.username,
@@ -434,12 +367,9 @@ export const googleLoginCallback = async (req, res, next) => {
       limits: user.limits,
       silane_id: user.silane_id,
     };
-
     if (state && state !== "guest") {
       pendingAuths.set(state, { token, user: safeUser });
     }
-
-    // 8. Tampilkan halaman HTML sukses yang mengirim token lewat postMessage
     res.send(`
       <!DOCTYPE html>
       <html>
@@ -476,7 +406,6 @@ export const googleLoginCallback = async (req, res, next) => {
         <script>
           const token = ${JSON.stringify(token)};
           const user = ${JSON.stringify(safeUser)};
-          
           if (window.opener) {
             window.opener.postMessage({ type: "silane-auth-success", token, user }, "*");
           }
@@ -491,37 +420,27 @@ export const googleLoginCallback = async (req, res, next) => {
   }
 };
 
-// ==========================================
-// PATREON OAUTH
-// ==========================================
 export const patreonLoginInitiate = (req, res) => {
   const { temp_id } = req.query;
   const CLIENT_ID = process.env.PATREON_CLIENT_ID;
   const REDIRECT_URI = process.env.PATREON_REDIRECT_URI;
   const PATREON_SCOPE = ["identity", "identity[email]"].join(" ");
-
   const state = temp_id || "guest";
-
   const url = `https://www.patreon.com/oauth2/authorize?response_type=code&client_id=${CLIENT_ID}&redirect_uri=${encodeURIComponent(
     REDIRECT_URI
   )}&scope=${encodeURIComponent(PATREON_SCOPE)}&state=${encodeURIComponent(state)}`;
-
   res.redirect(url);
 };
-
 export const patreonLoginCallback = async (req, res, next) => {
   const { code, state } = req.query;
   if (!code) return res.status(400).json({ error: "No code provided" });
-
   try {
-    // 1. Tukar Code dengan Access Token
     const params = new URLSearchParams();
     params.append("grant_type", "authorization_code");
     params.append("code", code);
     params.append("redirect_uri", process.env.PATREON_REDIRECT_URI);
     params.append("client_id", process.env.PATREON_CLIENT_ID);
     params.append("client_secret", process.env.PATREON_CLIENT_SECRET);
-
     const tokenRes = await axios.post(
       "https://www.patreon.com/api/oauth2/token",
       params.toString(),
@@ -529,48 +448,35 @@ export const patreonLoginCallback = async (req, res, next) => {
         headers: { "Content-Type": "application/x-www-form-urlencoded" },
       }
     );
-
     const { access_token, refresh_token } = tokenRes.data;
-
-    // 2. Ambil Profil dari Patreon
     const userRes = await axios.get(
       "https://www.patreon.com/api/oauth2/v2/identity?include=memberships&fields[user]=email,full_name,image_url",
       {
         headers: { Authorization: `Bearer ${access_token}` },
       }
     );
-
     const patreonUser = userRes.data?.data;
     const patreonId = patreonUser?.id;
     const email = patreonUser?.attributes?.email || null;
     const fullName = patreonUser?.attributes?.full_name || "Patreon User";
     const avatarUrl = patreonUser?.attributes?.image_url || null;
-
     if (!patreonId) {
       return res.status(500).json({ error: "Invalid Patreon response" });
     }
-
-    // 3. Cari atau Buat User di Tabel users Supabase
     let { data: user, error: findError } = await supabase
       .from("users")
       .select("*")
       .or(`patreon_id.eq.${patreonId},email.eq.${email}`)
       .maybeSingle();
-
     if (findError) throw findError;
-
     if (!user) {
-      // Buat user baru
       const baseUsername = fullName.replace(/\s+/g, "").toLowerCase();
       const randomSuffix = Math.floor(Math.random() * 1000);
       const username = `${baseUsername}${randomSuffix}`;
-
       const rawSecret = crypto.randomBytes(16).toString("hex");
       const encryptedSecret = encryptSecret(rawSecret);
       const loginHash = createLoginHash(rawSecret);
-
       const silaneId = await generateUniqueSilaneId();
-
       const { data: newUser, error: insertError } = await supabase
         .from("users")
         .insert([
@@ -589,34 +495,27 @@ export const patreonLoginCallback = async (req, res, next) => {
         ])
         .select()
         .single();
-
       if (insertError) throw insertError;
       user = newUser;
     } else {
-      // Jika user sudah ada, pastikan patreon_id ter-sync dan silane_id terisi
       const updateFields = { patreon_id: patreonId };
       if (!user.silane_id) {
         updateFields.silane_id = await generateUniqueSilaneId();
       }
-      
       const { data: updated, error: updateError } = await supabase
         .from("users")
         .update(updateFields)
         .eq("id", user.id)
         .select()
         .single();
-
       if (updateError) throw updateError;
       user = updated;
     }
-
-    // 4. Hubungkan Patreon Account (user_patreon)
     const { data: existingLink } = await supabase
       .from("user_patreon")
       .select("id")
       .eq("patreon_id", patreonId)
       .maybeSingle();
-
     const patreonPayload = {
       user_id: user.id,
       patreon_id: patreonId,
@@ -628,7 +527,6 @@ export const patreonLoginCallback = async (req, res, next) => {
       raw_data: patreonUser,
       updated_at: new Date().toISOString(),
     };
-
     if (existingLink) {
       await supabase
         .from("user_patreon")
@@ -637,8 +535,6 @@ export const patreonLoginCallback = async (req, res, next) => {
     } else {
       await supabase.from("user_patreon").insert([patreonPayload]);
     }
-
-    // 5. Pastikan Heralds Silane Asset Profile exists
     let { data: silaneData, error: fetchError } = await getHeraldSilaneByUserId(user.id);
     if (fetchError && fetchError.code === "PGRST116") {
       const newData = {
@@ -654,8 +550,6 @@ export const patreonLoginCallback = async (req, res, next) => {
     } else if (fetchError) {
       throw fetchError;
     }
-
-    // 6. Pastikan Heralds Firefly exists
     let { data: fireflyData, error: fireflyError } = await getHeraldsFireflyByUserId(user.id);
     if (fireflyError && fireflyError.code === "PGRST116") {
       const newFireflyData = {
@@ -674,14 +568,11 @@ export const patreonLoginCallback = async (req, res, next) => {
     } else if (fireflyError) {
       throw fireflyError;
     }
-
-    // 7. Buat JWT Token untuk Silane Backend
     const token = jwt.sign(
-      { id: user.id, username: user.username, role: user.role },
+      { id: user.id, username: user.username, role: user.role, silane_id: user.silane_id },
       process.env.JWT_SECRET,
       { expiresIn: "30d" }
     );
-
     const safeUser = {
       id: user.id,
       username: user.username,
@@ -690,12 +581,9 @@ export const patreonLoginCallback = async (req, res, next) => {
       limits: user.limits,
       silane_id: user.silane_id,
     };
-
     if (state && state !== "guest") {
       pendingAuths.set(state, { token, user: safeUser });
     }
-
-    // 8. Tampilkan halaman HTML sukses yang mengirim token lewat postMessage
     res.send(`
       <!DOCTYPE html>
       <html>
@@ -732,7 +620,6 @@ export const patreonLoginCallback = async (req, res, next) => {
         <script>
           const token = ${JSON.stringify(token)};
           const user = ${JSON.stringify(safeUser)};
-          
           if (window.opener) {
             window.opener.postMessage({ type: "silane-auth-success", token, user }, "*");
           }

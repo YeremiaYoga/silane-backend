@@ -1,11 +1,7 @@
 import crypto from "crypto";
 import dotenv from "dotenv";
-
 dotenv.config();
-
 const PEPPER_KEY = process.env.PEPPER_KEY || "heraldsmedia123";
-
-
 export const createLoginHash = (secretId) => {
   if (!secretId) return null;
   return crypto
