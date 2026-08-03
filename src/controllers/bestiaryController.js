@@ -161,9 +161,10 @@ function parseSkills(skillsObj) {
   Object.entries(skillsObj).forEach(([code, sk]) => {
     if (!sk) return;
     const name = SKILL_MAP[code] || (code.charAt(0).toUpperCase() + code.slice(1));
-    const mod = sk.total ?? sk.mod ?? sk.value ?? 0;
-    if (sk.proficient || sk.value || mod !== 0) {
-      list.push({ name, mod, label: `${name.toUpperCase()} | ${mod >= 0 ? "+" : ""}${mod}` });
+    const profVal = sk.value ?? (sk.proficient ? 1 : 0);
+    const mod = sk.total ?? sk.mod ?? 0;
+    if (profVal > 0 || sk.proficient || mod !== 0) {
+      list.push({ name, value: profVal || 1 });
     }
   });
   return list;
@@ -245,6 +246,78 @@ function classifyFoundryItem(it) {
   return "features";
 }
 
+export function extractSource(rawItem, item) {
+  if (item?.source && typeof item.source === "string" && item.source.trim() !== "" && item.source !== "Ignite") {
+    return item.source.trim();
+  }
+
+  const flags = rawItem?.flags || item?.flags || {};
+  if (flags?.plutonium?.source && typeof flags.plutonium.source === "string" && flags.plutonium.source.trim() !== "") {
+    return flags.plutonium.source.trim();
+  }
+
+  const system = rawItem?.system || item?.system || {};
+  const details = system?.details || {};
+  const srcVal = details.source || rawItem?.source || item?.source || system.source;
+
+  if (typeof srcVal === "string" && srcVal.trim() !== "") {
+    return srcVal.trim();
+  }
+  if (typeof srcVal === "object" && srcVal !== null) {
+    const custom = srcVal.custom || srcVal.book || srcVal.label || srcVal.name || srcVal.rules;
+    if (custom && typeof custom === "string" && custom.trim() !== "") {
+      return custom.trim();
+    }
+  }
+  return "SRD 5.2";
+}
+
+export function cleanPlutoniumFlags(obj) {
+  if (!obj || typeof obj !== "object") return obj;
+
+  if (obj.flags && typeof obj.flags === "object") {
+    const hasPlutonium =
+      obj.flags.plutonium !== undefined ||
+      Object.keys(obj.flags).some((k) => k.toLowerCase().includes("plutonium"));
+
+    if (hasPlutonium) {
+      obj.flags = {};
+    }
+  }
+
+  if (Array.isArray(obj.items)) {
+    obj.items.forEach((it) => cleanPlutoniumFlags(it));
+  }
+  ["features", "actions", "reactions", "legendary_actions", "spells"].forEach((cat) => {
+    if (Array.isArray(obj[cat])) {
+      obj[cat].forEach((it) => cleanPlutoniumFlags(it));
+    }
+  });
+
+  return obj;
+}
+
+export function calculateProficiency(cr) {
+  let numericCr = 0;
+  if (typeof cr === "number") {
+    numericCr = cr;
+  } else if (typeof cr === "string") {
+    if (cr === "1/8" || cr === "0.125") numericCr = 0.125;
+    else if (cr === "1/4" || cr === "0.25") numericCr = 0.25;
+    else if (cr === "1/2" || cr === "0.5") numericCr = 0.5;
+    else numericCr = parseFloat(cr) || 0;
+  }
+
+  if (numericCr >= 29) return 9;
+  if (numericCr >= 25) return 8;
+  if (numericCr >= 21) return 7;
+  if (numericCr >= 17) return 6;
+  if (numericCr >= 13) return 5;
+  if (numericCr >= 9) return 4;
+  if (numericCr >= 5) return 3;
+  return 2;
+}
+
 function extractFormatData(rawItem) {
   const system = rawItem.system || {};
   const details = system.details || {};
@@ -252,6 +325,10 @@ function extractFormatData(rawItem) {
   const traits = system.traits || {};
   const abilities = system.abilities || {};
   const rawItems = Array.isArray(rawItem.items) ? rawItem.items : [];
+
+  const crVal = details.cr ?? rawItem.cr ?? 0;
+  const computedProf = calculateProficiency(crVal);
+  const profVal = (attributes.prof && attributes.prof > 0) ? attributes.prof : computedProf;
 
   const itemsMap = {
     features: [],
@@ -332,7 +409,7 @@ function extractFormatData(rawItem) {
     alignment: details.alignment || "",
     cr: details.cr ?? 0,
     xp: details.xp?.value ?? 0,
-    proficiency: attributes.prof ?? 0,
+    proficiency: profVal,
     ac: attributes.ac?.value || attributes.ac?.flat || 10,
     hp: {
       value: attributes.hp?.value || 0,
@@ -341,14 +418,16 @@ function extractFormatData(rawItem) {
       formula: attributes.hp?.formula || "",
     },
     speed: attributes.movement || { walk: 30 },
-    abilities: {
-      str: { value: abilities.str?.value || 10, mod: abilities.str?.mod || 0, save: abilities.str?.save || 0 },
-      dex: { value: abilities.dex?.value || 10, mod: abilities.dex?.mod || 0, save: abilities.dex?.save || 0 },
-      con: { value: abilities.con?.value || 10, mod: abilities.con?.mod || 0, save: abilities.con?.save || 0 },
-      int: { value: abilities.int?.value || 10, mod: abilities.int?.mod || 0, save: abilities.int?.save || 0 },
-      wis: { value: abilities.wis?.value || 10, mod: abilities.wis?.mod || 0, save: abilities.wis?.save || 0 },
-      cha: { value: abilities.cha?.value || 10, mod: abilities.cha?.mod || 0, save: abilities.cha?.save || 0 },
-    },
+    abilities: (system.abilities && Object.keys(system.abilities).length > 0)
+      ? system.abilities
+      : (rawItem.abilities || {
+          str: abilities.str || { value: 10 },
+          dex: abilities.dex || { value: 10 },
+          con: abilities.con || { value: 10 },
+          int: abilities.int || { value: 10 },
+          wis: abilities.wis || { value: 10 },
+          cha: abilities.cha || { value: 10 },
+        }),
     skills: parsedSkills,
     senses: parsedSenses,
     damage_resistances: dr,
@@ -358,7 +437,25 @@ function extractFormatData(rawItem) {
     languages: languages,
     habitat: habitat,
     treasure: treasure,
-    biography: details.biography?.value || "",
+    biography: details.biography?.value || (typeof details.biography === "string" ? details.biography : null),
+    public_biography: details.biography?.public || null,
+    appearance: details.appearance || null,
+    personality_traits: details.trait || null,
+    ideals: details.ideal || null,
+    bonds: details.bond || null,
+    flaws: details.flaw || null,
+    characteristics: {
+      ...(details.alignment ? { alignment: details.alignment } : {}),
+      ...(details.gender ? { gender: details.gender } : {}),
+      ...(details.age ? { age: details.age } : {}),
+      ...(details.height ? { height: details.height } : {}),
+      ...(details.weight ? { weight: details.weight } : {}),
+      ...(details.eyes ? { eyes: details.eyes } : {}),
+      ...(details.skin ? { skin: details.skin } : {}),
+      ...(details.hair ? { hair: details.hair } : {}),
+      ...(details.faith ? { faith: details.faith } : {}),
+    },
+    source: extractSource(rawItem),
     features: itemsMap.features,
     actions: itemsMap.actions,
     reactions: itemsMap.reactions,
@@ -390,14 +487,17 @@ export async function importBestiaryItems(req, res) {
         item.img_token = await uploadExternalUrlToR2(item.img_token, fvttId, "token", user);
       }
 
-      const rawData = item.raw_data && Object.keys(item.raw_data).length > 0
+      const rawData = (item.raw_data && Object.keys(item.raw_data).length > 0)
         ? JSON.parse(JSON.stringify(item.raw_data))
-        : {};
+        : JSON.parse(JSON.stringify(item));
 
-      rawData.img = ensureHttps(item.img_portrait || item.image || "icons/svg/mystery-man.svg");
+      const extractedSource = extractSource(rawData, item);
+      cleanPlutoniumFlags(rawData);
+
+      rawData.img = ensureHttps(item.img_portrait || item.image || rawData.img || "icons/svg/mystery-man.svg");
       if (!rawData.prototypeToken) rawData.prototypeToken = {};
       if (!rawData.prototypeToken.texture) rawData.prototypeToken.texture = {};
-      rawData.prototypeToken.texture.src = ensureHttps(item.img_token || item.img_portrait || "icons/svg/mystery-man.svg");
+      rawData.prototypeToken.texture.src = ensureHttps(item.img_token || item.img_portrait || rawData.prototypeToken?.texture?.src || "icons/svg/mystery-man.svg");
 
       if (!rawData.prototypeToken.ring) {
         rawData.prototypeToken.ring = { enabled: false };
@@ -409,16 +509,19 @@ export async function importBestiaryItems(req, res) {
 
       item.raw_data = rawData;
 
-      // Extract format_data and items
       const extracted = extractFormatData(rawData);
       const formatData = {
         ...extracted,
+        source: extractedSource,
         img_portrait: item.img_portrait || extracted.img_portrait,
         img_token: item.img_token || extracted.img_token,
         image: item.img_portrait || extracted.image,
       };
 
+      cleanPlutoniumFlags(formatData);
+
       item.format_data = formatData;
+      item.source = extractedSource;
       item.features = extracted.features || [];
       item.actions = extracted.actions || [];
       item.reactions = extracted.reactions || [];
@@ -444,7 +547,14 @@ export async function importBestiaryItems(req, res) {
       item.languages = extracted.languages || [];
       item.habitat = extracted.habitat || null;
       item.treasure = extracted.treasure || null;
-      item.biography = extracted.biography || null;
+      item.biography = extracted.biography || item.biography || null;
+      item.public_biography = extracted.public_biography || item.public_biography || null;
+      item.appearance = extracted.appearance || item.appearance || null;
+      item.personality_traits = extracted.personality_traits || item.personality_traits || null;
+      item.ideals = extracted.ideals || item.ideals || null;
+      item.bonds = extracted.bonds || item.bonds || null;
+      item.flaws = extracted.flaws || item.flaws || null;
+      item.characteristics = extracted.characteristics || item.characteristics || {};
 
       const itemData = sanitizeItemImages({
         ...item,
@@ -544,13 +654,59 @@ export async function deleteBestiaryItems(req, res) {
       return res.status(400).json({ success: false, message: "No IDs provided." });
     }
 
+    // 1. Fetch item details before deleting from DB so we have their image URLs
+    const itemsToDelete = [];
+    for (const id of ids) {
+      let item;
+      if (view === "homebrew" || !isAdmin) {
+        item = await getHomebrewBestiaryById(id, isAdmin ? null : (user.id || user.user_id));
+      } else {
+        item = await getFoundryBestiaryById(id);
+      }
+      if (item) itemsToDelete.push(item);
+    }
+
+    // 2. Delete items from database
     if (view === "homebrew" || !isAdmin) {
       await deleteHomebrewBestiary(ids, isAdmin ? null : (user.id || user.user_id));
     } else {
       await deleteFoundryBestiary(ids);
     }
 
-    return res.json({ success: true, message: `Deleted ${ids.length} bestiary item(s).` });
+    // 3. Delete R2 image files belonging to the deleted items
+    const r2Domain = (process.env.SILANE_PUBLIC_DOMAIN || "").replace(/^https?:\/\//, "").replace(/\/$/, "");
+    const r2PublicUrl = (process.env.CLOUDFLARE_R2_PUBLIC_URL || "").replace(/^https?:\/\//, "").replace(/\/$/, "");
+
+    for (const item of itemsToDelete) {
+      const imageUrls = new Set();
+      if (item.image) imageUrls.add(item.image);
+      if (item.img_portrait) imageUrls.add(item.img_portrait);
+      if (item.img_token) imageUrls.add(item.img_token);
+      if (item.raw_data?.img) imageUrls.add(item.raw_data.img);
+      if (item.raw_data?.prototypeToken?.texture?.src) imageUrls.add(item.raw_data.prototypeToken.texture.src);
+
+      for (const url of imageUrls) {
+        if (!url || typeof url !== "string") continue;
+        const formatted = ensureHttps(url);
+        const isR2 =
+          (r2Domain && formatted.includes(r2Domain)) ||
+          (r2PublicUrl && formatted.includes(r2PublicUrl)) ||
+          formatted.includes("r2.cloudflarestorage.com") ||
+          formatted.includes("channeldeliver.my.id") ||
+          formatted.includes("pub-") ||
+          formatted.includes("projectignite");
+
+        if (isR2) {
+          try {
+            await deleteAssetFromR2(formatted);
+          } catch (err) {
+            console.warn(`Failed to delete R2 image ${formatted}:`, err.message);
+          }
+        }
+      }
+    }
+
+    return res.json({ success: true, message: `Deleted ${ids.length} bestiary item(s) and their images.` });
   } catch (error) {
     console.error("deleteBestiaryItems error:", error);
     return res.status(500).json({ success: false, message: error.message });

@@ -39,6 +39,27 @@ export async function getFoundryBestiaryById(id) {
   return data;
 }
 
+function calculateProficiency(cr) {
+  let numericCr = 0;
+  if (typeof cr === "number") {
+    numericCr = cr;
+  } else if (typeof cr === "string") {
+    if (cr === "1/8" || cr === "0.125") numericCr = 0.125;
+    else if (cr === "1/4" || cr === "0.25") numericCr = 0.25;
+    else if (cr === "1/2" || cr === "0.5") numericCr = 0.5;
+    else numericCr = parseFloat(cr) || 0;
+  }
+
+  if (numericCr >= 29) return 9;
+  if (numericCr >= 25) return 8;
+  if (numericCr >= 21) return 7;
+  if (numericCr >= 17) return 6;
+  if (numericCr >= 13) return 5;
+  if (numericCr >= 9) return 4;
+  if (numericCr >= 5) return 3;
+  return 2;
+}
+
 export async function upsertFoundryBestiary(itemData) {
   const imgPort = ensureHttps(itemData.img_portrait || itemData.portraitUrl || itemData.image || null);
   const imgTok = ensureHttps(itemData.img_token || itemData.tokenUrl || null);
@@ -74,7 +95,6 @@ export async function upsertFoundryBestiary(itemData) {
     img_token: imgTok,
     cr: itemData.cr ?? 0,
     xp: itemData.xp ?? 0,
-    proficiency: itemData.proficiency ?? 0,
     size: itemData.size || null,
     creature_type: itemData.creature_type || itemData.type || null,
     subtype: itemData.subtype || null,
@@ -97,8 +117,15 @@ export async function upsertFoundryBestiary(itemData) {
     spells: itemData.spells || formatData.spells || [],
     habitat: itemData.habitat || formatData.habitat || null,
     treasure: itemData.treasure || formatData.treasure || null,
-    biography: itemData.biography || null,
-    source: itemData.source || "Ignite",
+    biography: itemData.biography || formatData.biography || null,
+    public_biography: itemData.public_biography || formatData.public_biography || null,
+    appearance: itemData.appearance || formatData.appearance || null,
+    personality_traits: itemData.personality_traits || formatData.personality_traits || null,
+    ideals: itemData.ideals || formatData.ideals || null,
+    bonds: itemData.bonds || formatData.bonds || null,
+    flaws: itemData.flaws || formatData.flaws || null,
+    characteristics: itemData.characteristics || formatData.characteristics || {},
+    source: itemData.source || formatData?.source || "SRD 5.2",
     fvtt_id: itemData.fvtt_id || itemData.id || null,
     raw_data: rawData,
     format_data: formatData,
@@ -182,7 +209,6 @@ export async function upsertHomebrewBestiary(itemData) {
     img_token: imgTok,
     cr: itemData.cr ?? 0,
     xp: itemData.xp ?? 0,
-    proficiency: itemData.proficiency ?? 0,
     size: itemData.size || null,
     creature_type: itemData.creature_type || itemData.type || null,
     subtype: itemData.subtype || null,
@@ -205,8 +231,15 @@ export async function upsertHomebrewBestiary(itemData) {
     spells: itemData.spells || formatData.spells || [],
     habitat: itemData.habitat || formatData.habitat || null,
     treasure: itemData.treasure || formatData.treasure || null,
-    biography: itemData.biography || null,
-    source: "Homebrew",
+    biography: itemData.biography || formatData.biography || null,
+    public_biography: itemData.public_biography || formatData.public_biography || null,
+    appearance: itemData.appearance || formatData.appearance || null,
+    personality_traits: itemData.personality_traits || formatData.personality_traits || null,
+    ideals: itemData.ideals || formatData.ideals || null,
+    bonds: itemData.bonds || formatData.bonds || null,
+    flaws: itemData.flaws || formatData.flaws || null,
+    characteristics: itemData.characteristics || formatData.characteristics || {},
+    source: itemData.source || formatData?.source || "Homebrew",
     fvtt_id: itemData.fvtt_id || itemData.id || null,
     user_id: itemData.user_id,
     user_name: itemData.user_name || "User",
