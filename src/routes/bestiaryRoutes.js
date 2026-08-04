@@ -7,6 +7,7 @@ import {
   deleteBestiaryItems,
   adminListAllHomebrewBestiary,
   updateBestiaryItemImages,
+  cleanDatabasePlutonium,
 } from "../controllers/bestiaryController.js";
 import upload from "../middlewares/uploadMiddleware.js";
 import { verifyToken } from "../middlewares/authMiddleware.js";
@@ -28,5 +29,7 @@ router.post("/import", importBestiaryItems);
 router.post("/delete", deleteBestiaryItems);
 
 router.get("/admin/homebrew", adminListAllHomebrewBestiary);
+
+router.post("/admin/clean_plutonium", cleanDatabasePlutonium);
 
 export default router;

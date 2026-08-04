@@ -56,59 +56,76 @@ export async function uploadBestiaryImage(req, res) {
   }
 }
 
-export function ensureHttps(urlStr) {
+const INTERNAL_CDN_BASE = "https://019a0f6bb5a27dc5b6ab32a19a8ad5d6.phanneldeliver.my.id/foundryvtt";
+const GENERIC_FEATURE_FULL_URL = `${INTERNAL_CDN_BASE}/systems/dnd5e/icons/svg/items/feature.svg`;
+
+export function formatImageUrl(urlStr) {
   if (!urlStr || typeof urlStr !== "string") return urlStr;
   let str = urlStr.trim();
-  if (str.startsWith("data:") || str.startsWith("http://") || str.startsWith("https://")) {
+
+  if (str.startsWith("data:")) return str;
+
+  if (/plutonium/i.test(str)) {
+    return GENERIC_FEATURE_FULL_URL;
+  }
+
+  if (str.startsWith("http://") || str.startsWith("https://")) {
     return str;
   }
-  if (str.includes(".") && !str.startsWith("/")) {
-    return `https://${str}`;
+
+  let clean = str.startsWith("/") ? str.slice(1) : str;
+
+  if (clean.startsWith("icons/")) {
+    return `${INTERNAL_CDN_BASE}/${clean.slice(6)}`;
   }
-  return str;
+
+  if (clean.startsWith("systems/")) {
+    return `${INTERNAL_CDN_BASE}/${clean}`;
+  }
+
+  return `${INTERNAL_CDN_BASE}/${clean}`;
+}
+
+export function ensureHttps(urlStr) {
+  return formatImageUrl(urlStr);
 }
 
 export function sanitizeItemImages(item) {
   if (!item) return item;
-  if (item.image) item.image = ensureHttps(item.image);
-  if (item.img_portrait) item.img_portrait = ensureHttps(item.img_portrait);
-  if (item.img_token) item.img_token = ensureHttps(item.img_token);
-  if (item.raw_data) {
-    if (item.raw_data.img) item.raw_data.img = ensureHttps(item.raw_data.img);
-    if (item.raw_data.prototypeToken?.texture?.src) {
-      item.raw_data.prototypeToken.texture.src = ensureHttps(item.raw_data.prototypeToken.texture.src);
-    }
-  }
-  if (item.format_data) {
-    if (item.format_data.img) item.format_data.img = ensureHttps(item.format_data.img);
-    if (item.format_data.prototypeToken?.texture?.src) {
-      item.format_data.prototypeToken.texture.src = ensureHttps(item.format_data.prototypeToken.texture.src);
-    }
-  }
+  if (item.image) item.image = formatImageUrl(item.image);
+  if (item.img_portrait) item.img_portrait = formatImageUrl(item.img_portrait);
+  if (item.img_token) item.img_token = formatImageUrl(item.img_token);
+  cleanPlutoniumFlags(item);
   return item;
 }
 
 export async function uploadExternalUrlToR2(urlStr, fvttId, imageType, user) {
   if (!urlStr || typeof urlStr !== "string") return urlStr;
-
-  let formattedUrl = ensureHttps(urlStr);
+  let str = urlStr.trim();
+  if (str.startsWith("data:")) return str;
 
   const r2Domain = (process.env.SILANE_PUBLIC_DOMAIN || "").replace(/^https?:\/\//, "").replace(/\/$/, "");
   const r2PublicUrl = (process.env.CLOUDFLARE_R2_PUBLIC_URL || "").replace(/^https?:\/\//, "").replace(/\/$/, "");
+
   if (
-    (r2Domain && formattedUrl.includes(r2Domain)) ||
-    (r2PublicUrl && formattedUrl.includes(r2PublicUrl)) ||
-    formattedUrl.includes("r2.cloudflarestorage.com") ||
-    formattedUrl.includes("channeldeliver.my.id") ||
-    formattedUrl.includes("pub-") ||
-    formattedUrl.includes("projectignite")
+    (r2Domain && str.includes(r2Domain) && !str.includes("/foundryvtt/")) ||
+    (r2PublicUrl && str.includes(r2PublicUrl) && !str.includes("/foundryvtt/")) ||
+    str.includes("r2.cloudflarestorage.com") ||
+    (str.includes("phanneldeliver.my.id") && !str.includes("/foundryvtt/")) ||
+    (str.includes("pub-") && !str.includes("/foundryvtt/")) ||
+    (str.includes("projectignite") && !str.includes("/foundryvtt/"))
   ) {
-    return formattedUrl;
+    return str;
   }
 
   try {
-    const fetchRes = await fetch(formattedUrl);
-    if (!fetchRes.ok) return formattedUrl;
+    let fetchUrl = str;
+    if (!str.startsWith("http://") && !str.startsWith("https://")) {
+      fetchUrl = formatImageUrl(str);
+    }
+
+    const fetchRes = await fetch(fetchUrl);
+    if (!fetchRes.ok) return formatImageUrl(str);
 
     const arrayBuffer = await fetchRes.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
@@ -127,11 +144,44 @@ export async function uploadExternalUrlToR2(urlStr, fvttId, imageType, user) {
       customFileName,
     });
 
-    return ensureHttps(publicUrl || formattedUrl);
+    return publicUrl || formatImageUrl(str);
   } catch (err) {
-    console.warn(`uploadExternalUrlToR2 failed for ${formattedUrl}:`, err.message);
-    return formattedUrl;
+    console.warn(`uploadExternalUrlToR2 failed for ${str}:`, err.message);
+    return formatImageUrl(str);
   }
+}
+
+export function cleanPlutoniumFlags(obj) {
+  if (!obj || typeof obj !== "object") return obj;
+
+  if (Array.isArray(obj)) {
+    obj.forEach((it) => cleanPlutoniumFlags(it));
+    return obj;
+  }
+
+  if (obj.flags && typeof obj.flags === "object") {
+    delete obj.flags.plutonium;
+    Object.keys(obj.flags).forEach((k) => {
+      if (k.toLowerCase().includes("plutonium")) {
+        delete obj.flags[k];
+      }
+    });
+  }
+
+  for (const key of Object.keys(obj)) {
+    const val = obj[key];
+    if (typeof val === "string") {
+      if (/plutonium/i.test(val)) {
+        obj[key] = GENERIC_FEATURE_FULL_URL;
+      } else if (key === "img" || key === "image" || key === "src") {
+        obj[key] = formatImageUrl(val);
+      }
+    } else if (val && typeof val === "object") {
+      cleanPlutoniumFlags(val);
+    }
+  }
+
+  return obj;
 }
 
 const SKILL_MAP = {
@@ -270,31 +320,6 @@ export function extractSource(rawItem, item) {
     }
   }
   return "SRD 5.2";
-}
-
-export function cleanPlutoniumFlags(obj) {
-  if (!obj || typeof obj !== "object") return obj;
-
-  if (obj.flags && typeof obj.flags === "object") {
-    const hasPlutonium =
-      obj.flags.plutonium !== undefined ||
-      Object.keys(obj.flags).some((k) => k.toLowerCase().includes("plutonium"));
-
-    if (hasPlutonium) {
-      obj.flags = {};
-    }
-  }
-
-  if (Array.isArray(obj.items)) {
-    obj.items.forEach((it) => cleanPlutoniumFlags(it));
-  }
-  ["features", "actions", "reactions", "legendary_actions", "spells"].forEach((cat) => {
-    if (Array.isArray(obj[cat])) {
-      obj[cat].forEach((it) => cleanPlutoniumFlags(it));
-    }
-  });
-
-  return obj;
 }
 
 export function calculateProficiency(cr) {
@@ -654,7 +679,6 @@ export async function deleteBestiaryItems(req, res) {
       return res.status(400).json({ success: false, message: "No IDs provided." });
     }
 
-    // 1. Fetch item details before deleting from DB so we have their image URLs
     const itemsToDelete = [];
     for (const id of ids) {
       let item;
@@ -666,14 +690,12 @@ export async function deleteBestiaryItems(req, res) {
       if (item) itemsToDelete.push(item);
     }
 
-    // 2. Delete items from database
     if (view === "homebrew" || !isAdmin) {
       await deleteHomebrewBestiary(ids, isAdmin ? null : (user.id || user.user_id));
     } else {
       await deleteFoundryBestiary(ids);
     }
 
-    // 3. Delete R2 image files belonging to the deleted items
     const r2Domain = (process.env.SILANE_PUBLIC_DOMAIN || "").replace(/^https?:\/\//, "").replace(/\/$/, "");
     const r2PublicUrl = (process.env.CLOUDFLARE_R2_PUBLIC_URL || "").replace(/^https?:\/\//, "").replace(/\/$/, "");
 
@@ -785,6 +807,46 @@ export async function updateBestiaryItemImages(req, res) {
     return res.json({ success: true, message: "Images updated successfully.", item: saved });
   } catch (error) {
     console.error("updateBestiaryItemImages error:", error);
+    return res.status(500).json({ success: false, message: error.message });
+  }
+}
+
+export async function cleanDatabasePlutonium(req, res) {
+  try {
+    const user = req.user;
+    if (user?.role !== "admin") {
+      return res.status(403).json({ success: false, message: "Admin access required." });
+    }
+
+    let cleanedCount = 0;
+
+    const { items: fbItems } = await listFoundryBestiary({ limit: 5000 });
+    for (const item of fbItems) {
+      const stringifiedBefore = JSON.stringify(item);
+      cleanPlutoniumFlags(item);
+      if (JSON.stringify(item) !== stringifiedBefore) {
+        await upsertFoundryBestiary(item);
+        cleanedCount++;
+      }
+    }
+
+    const { items: hbItems } = await listHomebrewBestiary({ userId: null, limit: 5000 });
+    for (const item of hbItems) {
+      const stringifiedBefore = JSON.stringify(item);
+      cleanPlutoniumFlags(item);
+      if (JSON.stringify(item) !== stringifiedBefore) {
+        await upsertHomebrewBestiary(item);
+        cleanedCount++;
+      }
+    }
+
+    return res.json({
+      success: true,
+      message: `Database cleaned successfully. Sanitized ${cleanedCount} records.`,
+      cleanedCount,
+    });
+  } catch (error) {
+    console.error("cleanDatabasePlutonium error:", error);
     return res.status(500).json({ success: false, message: error.message });
   }
 }
