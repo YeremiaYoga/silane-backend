@@ -362,6 +362,127 @@ export function calculateProficiency(cr) {
   return 2;
 }
 
+function extractItemRoll(it) {
+  if (!it) return "";
+  const system = it.system || it;
+
+  if (typeof it.roll === "string" && it.roll.trim()) {
+    const r = it.roll.trim();
+    if (!r.includes("d") && (r.startsWith("+") || r.startsWith("-") || r.toUpperCase().includes("CON") || r.toUpperCase().includes("DEX") || r.toUpperCase().includes("WIS") || r.toUpperCase().includes("STR") || r.toUpperCase().includes("INT") || r.toUpperCase().includes("CHA"))) {
+      return r;
+    }
+  }
+
+  const saveObj = system.save || it.save;
+  if (saveObj) {
+    const abil = saveObj.ability || saveObj.abil;
+    const dcVal = typeof saveObj.dc === "object" ? (saveObj.dc?.value ?? saveObj.dc?.formula ?? saveObj.dc?.flat) : saveObj.dc;
+    if (abil && (dcVal !== undefined && dcVal !== null && dcVal !== "")) {
+      return `${String(abil).toUpperCase()} ${dcVal}`;
+    }
+  }
+
+  const atkBonus = system.attackBonus ?? system.bonus ?? system.attack?.bonus ?? it.attackBonus ?? it.bonus;
+  if (atkBonus !== undefined && atkBonus !== null && atkBonus !== "") {
+    const num = Number(atkBonus);
+    return !isNaN(num) ? `${num >= 0 ? "+" : ""}${num}` : String(atkBonus);
+  }
+
+  const activities = system.activities ? Object.values(system.activities) : [];
+  for (const act of activities) {
+    if (!act) continue;
+
+    if (act.type === "save" || act.save) {
+      const s = act.save || {};
+      const abil = s.ability;
+      const dcVal = typeof s.dc === "object" ? (s.dc?.value ?? s.dc?.formula ?? s.dc?.flat) : s.dc;
+      if (abil && (dcVal !== undefined && dcVal !== null && dcVal !== "")) {
+        return `${String(abil).toUpperCase()} ${dcVal}`;
+      }
+    }
+
+    if (act.type === "attack" || act.attack) {
+      const atk = act.attack || {};
+      const bonus = atk.bonus ?? act.bonus;
+      if (bonus !== undefined && bonus !== null && bonus !== "") {
+        const num = Number(bonus);
+        return !isNaN(num) ? `${num >= 0 ? "+" : ""}${num}` : String(bonus);
+      }
+      if (atk.flat && atk.value) {
+        const num = Number(atk.value);
+        return !isNaN(num) ? `${num >= 0 ? "+" : ""}${num}` : String(atk.value);
+      }
+    }
+  }
+
+  if (typeof it.roll === "string" && it.roll.trim() && !it.roll.includes("d")) {
+    return it.roll.trim();
+  }
+
+  return "";
+}
+
+function extractItemFormula(it) {
+  if (!it) return "";
+  const system = it.system || it;
+
+  if (typeof it.formula === "string" && it.formula.trim()) {
+    return it.formula.trim();
+  }
+  if (typeof it.roll === "string" && it.roll.trim() && it.roll.includes("d")) {
+    return it.roll.trim();
+  }
+  if (typeof system.formula === "string" && system.formula.trim()) {
+    return system.formula.trim();
+  }
+
+  const parts = system.damage?.parts || it.damage?.parts;
+  if (Array.isArray(parts) && parts.length > 0) {
+    const formulas = parts
+      .map((p) => {
+        if (Array.isArray(p)) return p[0];
+        if (typeof p === "object" && p !== null) return p.formula || p.custom?.formula || p[0];
+        if (typeof p === "string") return p;
+        return null;
+      })
+      .filter(Boolean);
+
+    if (formulas.length > 0) {
+      return formulas.join(" + ");
+    }
+  }
+
+  const activities = system.activities ? Object.values(system.activities) : [];
+  for (const act of activities) {
+    if (!act) continue;
+
+    const actParts = act.damage?.parts;
+    if (Array.isArray(actParts) && actParts.length > 0) {
+      const formulas = actParts
+        .map((p) => {
+          if (Array.isArray(p)) return p[0];
+          if (typeof p === "object" && p !== null) return p.formula || p.custom?.formula || p[0];
+          if (typeof p === "string") return p;
+          return null;
+        })
+        .filter(Boolean);
+
+      if (formulas.length > 0) {
+        return formulas.join(" + ");
+      }
+    }
+
+    if (act.healing?.formula) {
+      return act.healing.formula;
+    }
+    if (act.formula) {
+      return act.formula;
+    }
+  }
+
+  return "";
+}
+
 function extractFormatData(rawItem) {
   const system = rawItem.system || {};
   const details = system.details || {};
@@ -411,10 +532,12 @@ function extractFormatData(rawItem) {
       image: ensureHttps(it.img || it.image || ""),
       description: it.system?.description?.value || it.description || "",
       activation: it.system?.activation || it.activation || {},
+      duration: it.system?.duration || it.duration || {},
       range: it.system?.range || it.range || {},
       target: it.system?.target || it.target || {},
       uses: it.system?.uses || it.uses || {},
-      roll: it.system?.formula || it.system?.damage?.parts?.[0]?.[0] || it.roll || "",
+      roll: extractItemRoll(it),
+      formula: extractItemFormula(it),
       save: it.system?.save || it.save || {},
     };
 
