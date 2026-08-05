@@ -7,6 +7,7 @@ import {
 import { nanoid } from "nanoid";
 import sharp from "sharp";
 import path from "path";
+
 const s3Client = new S3Client({
   region: "auto",
   endpoint: `https://${process.env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`,
@@ -15,9 +16,8 @@ const s3Client = new S3Client({
     secretAccessKey: process.env.R2_SECRET_ACCESS_KEY,
   },
 });
-const SILANE_BUCKET = process.env.SILANE_BUCKET_NAME;
-const SILANE_DOMAIN = process.env.SILANE_PUBLIC_DOMAIN;
-export async function uploadAssetToR2({ file, folderName, customFileName }) {
+
+export async function uploadAssetToR2({ file, folderName, customFileName, bucketName, domainUrl }) {
   if (!file || !file.buffer) return null;
   const isImage = file.mimetype.startsWith("image/");
   const isAudio = file.mimetype.startsWith("audio/");
@@ -37,7 +37,7 @@ export async function uploadAssetToR2({ file, folderName, customFileName }) {
     let contentType;
     if (isImage) {
       filename = customFileName
-        ? (customFileName.endsWith('.webp') ? customFileName : `${customFileName}.webp`)
+        ? (customFileName.endsWith(".webp") ? customFileName : `${customFileName}.webp`)
         : `${uniqueId}.webp`;
       contentType = "image/webp";
       fileBuffer = await sharp(file.buffer).webp({ quality: 80 }).toBuffer();
@@ -47,15 +47,20 @@ export async function uploadAssetToR2({ file, folderName, customFileName }) {
       contentType = file.mimetype;
     }
     const key = folderName ? `${folderName}/${filename}` : filename;
+
+    const targetBucket = bucketName || process.env.SILANE_BUCKET_NAME || "silane";
+
     const command = new PutObjectCommand({
-      Bucket: SILANE_BUCKET,
+      Bucket: targetBucket,
       Key: key,
       Body: fileBuffer,
       ContentType: contentType,
     });
     await s3Client.send(command);
-    let cleanDomain = (SILANE_DOMAIN || "").replace(/\/$/, "");
-    if (cleanDomain && !cleanDomain.startsWith("http://") && !cleanDomain.startsWith("https://")) {
+
+    let cleanDomain = domainUrl || process.env.SILANE_PUBLIC_DOMAIN || "sih4storage.phanneldeliver.my.id";
+    cleanDomain = cleanDomain.replace(/\/$/, "");
+    if (!cleanDomain.startsWith("http://") && !cleanDomain.startsWith("https://")) {
       cleanDomain = `https://${cleanDomain}`;
     }
     return `${cleanDomain}/${key}`;
@@ -64,6 +69,7 @@ export async function uploadAssetToR2({ file, folderName, customFileName }) {
     return null;
   }
 }
+
 export async function deleteAssetFromR2(fileUrl) {
   if (!fileUrl) return;
   try {
@@ -76,31 +82,59 @@ export async function deleteAssetFromR2(fileUrl) {
     }
     if (key.startsWith("/")) key = key.substring(1);
     key = decodeURIComponent(key);
+
+    const igniteDomain = (process.env.IGNITE_PUBLIC_DOMAIN || "").replace(/^https?:\/\//, "").replace(/\/$/, "");
+    const igniteBucket = process.env.IGNITE_BUCKET_NAME?.trim() || "projectignite";
+    const silaneBucket = process.env.SILANE_BUCKET_NAME?.trim() || "silane";
+
+    let targetBucket = silaneBucket;
+    if (
+      (igniteDomain && fileUrl.includes(igniteDomain)) ||
+      fileUrl.includes("projectignite")
+    ) {
+      targetBucket = igniteBucket;
+    }
+
     const command = new DeleteObjectCommand({
-      Bucket: SILANE_BUCKET,
+      Bucket: targetBucket,
       Key: key,
     });
     await s3Client.send(command);
-    console.log(`🗑️ Berhasil menghapus: ${key}`);
+    console.log(`🗑️ Berhasil menghapus: ${key} dari bucket ${targetBucket}`);
     return true;
   } catch (err) {
     console.error(`💥 R2 Delete Error:`, err);
     return false;
   }
 }
+
 export async function getFileSizeFromR2(fileUrl) {
   if (!fileUrl) return 0;
   try {
     let key = fileUrl.startsWith("http") ? new URL(fileUrl).pathname : fileUrl;
     if (key.startsWith("/")) key = key.substring(1);
     key = decodeURIComponent(key);
+
+    const igniteDomain = (process.env.IGNITE_PUBLIC_DOMAIN || "").replace(/^https?:\/\//, "").replace(/\/$/, "");
+    const igniteBucket = process.env.IGNITE_BUCKET_NAME?.trim() || "projectignite";
+    const silaneBucket = process.env.SILANE_BUCKET_NAME?.trim() || "silane";
+
+    let targetBucket = silaneBucket;
+    if (
+      (igniteDomain && fileUrl.includes(igniteDomain)) ||
+      fileUrl.includes("projectignite")
+    ) {
+      targetBucket = igniteBucket;
+    }
+
     const command = new HeadObjectCommand({
-      Bucket: process.env.SILANE_BUCKET_NAME,
+      Bucket: targetBucket,
       Key: key,
     });
-    const response = await s3Client.send(command);
-    return response.ContentLength || 0;
+    const res = await s3Client.send(command);
+    return res.ContentLength || 0;
   } catch (err) {
+    console.error(`💥 R2 Head Error:`, err);
     return 0;
   }
 }

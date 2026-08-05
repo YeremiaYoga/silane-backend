@@ -21,22 +21,36 @@ export async function uploadBestiaryImage(req, res) {
     }
 
     const isAdmin = user.role === "admin";
-    const userIdentifier = user.silane_id || user.id || user.username || "User";
+    const userIdentifier = user.silane_id || user.public_id || user.id || user.username || "user";
 
     const suffix = image_type === "portrait" || image_type === "port" ? "port" : "token";
     const customFileName = `${fvtt_id}-${suffix}.webp`;
 
+    const adminBucket = (process.env.IGNITE_BUCKET_NAME || "projectignite").trim();
+    const adminDomain = (process.env.IGNITE_PUBLIC_DOMAIN || "https://019a0f6bb5a27dc5b6ab32a19a8ad5d6.phanneldeliver.my.id").trim();
+    const silaneBucket = (process.env.SILANE_BUCKET_NAME || "silane").trim();
+    const silaneDomain = (process.env.SILANE_PUBLIC_DOMAIN || "https://sih4storage.phanneldeliver.my.id").trim();
+
     let folderName = "";
+    let bucketName = "";
+    let domainUrl = "";
+
     if (isAdmin) {
       folderName = "bestiary";
+      bucketName = adminBucket;
+      domainUrl = adminDomain;
     } else {
-      folderName = `Silane/${userIdentifier}`;
+      folderName = userIdentifier;
+      bucketName = silaneBucket;
+      domainUrl = silaneDomain;
     }
 
     const publicUrl = await uploadAssetToR2({
       file,
       folderName,
       customFileName,
+      bucketName,
+      domainUrl,
     });
 
     if (!publicUrl) {
@@ -104,18 +118,21 @@ export async function uploadExternalUrlToR2(urlStr, fvttId, imageType, user) {
   let str = urlStr.trim();
   if (str.startsWith("data:")) return str;
 
-  const r2Domain = (process.env.SILANE_PUBLIC_DOMAIN || "").replace(/^https?:\/\//, "").replace(/\/$/, "");
-  const r2PublicUrl = (process.env.CLOUDFLARE_R2_PUBLIC_URL || "").replace(/^https?:\/\//, "").replace(/\/$/, "");
+  const isAdmin = user?.role === "admin";
+  const userIdentifier = user?.silane_id || user?.public_id || user?.id || user?.username || "user";
 
-  if (
-    (r2Domain && str.includes(r2Domain) && !str.includes("/foundryvtt/")) ||
-    (r2PublicUrl && str.includes(r2PublicUrl) && !str.includes("/foundryvtt/")) ||
-    str.includes("r2.cloudflarestorage.com") ||
-    (str.includes("phanneldeliver.my.id") && !str.includes("/foundryvtt/")) ||
-    (str.includes("pub-") && !str.includes("/foundryvtt/")) ||
-    (str.includes("projectignite") && !str.includes("/foundryvtt/"))
-  ) {
-    return str;
+  const adminBucket = (process.env.IGNITE_BUCKET_NAME || "projectignite").trim();
+  const adminDomain = (process.env.IGNITE_PUBLIC_DOMAIN || "https://019a0f6bb5a27dc5b6ab32a19a8ad5d6.phanneldeliver.my.id").trim();
+  const silaneBucket = (process.env.SILANE_BUCKET_NAME || "silane").trim();
+  const silaneDomain = (process.env.SILANE_PUBLIC_DOMAIN || "https://sih4storage.phanneldeliver.my.id").trim();
+
+  const cleanAdminDomain = adminDomain.replace(/^https?:\/\//, "").replace(/\/$/, "");
+  const cleanSilaneDomain = silaneDomain.replace(/^https?:\/\//, "").replace(/\/$/, "");
+
+  if (isAdmin) {
+    if (cleanAdminDomain && str.includes(cleanAdminDomain) && str.includes("/bestiary/")) return str;
+  } else {
+    if (cleanSilaneDomain && str.includes(cleanSilaneDomain) && str.includes(`/${userIdentifier}/`)) return str;
   }
 
   try {
@@ -131,17 +148,19 @@ export async function uploadExternalUrlToR2(urlStr, fvttId, imageType, user) {
     const buffer = Buffer.from(arrayBuffer);
     const contentType = fetchRes.headers.get("content-type") || "image/webp";
 
-    const isAdmin = user.role === "admin";
-    const userIdentifier = user.silane_id || user.id || user.username || "User";
     const suffix = imageType === "portrait" || imageType === "port" ? "port" : "token";
     const customFileName = `${fvttId}-${suffix}.webp`;
 
-    const folderName = isAdmin ? "bestiary" : `Silane/${userIdentifier}`;
+    const folderName = isAdmin ? "bestiary" : userIdentifier;
+    const bucketName = isAdmin ? adminBucket : silaneBucket;
+    const domainUrl = isAdmin ? adminDomain : silaneDomain;
 
     const publicUrl = await uploadAssetToR2({
       file: { buffer, mimetype: contentType, originalname: customFileName },
       folderName,
       customFileName,
+      bucketName,
+      domainUrl,
     });
 
     return publicUrl || formatImageUrl(str);
@@ -349,7 +368,17 @@ function extractFormatData(rawItem) {
   const attributes = system.attributes || {};
   const traits = system.traits || {};
   const abilities = system.abilities || {};
-  const rawItems = Array.isArray(rawItem.items) ? rawItem.items : [];
+  let rawItems = Array.isArray(rawItem.items) ? rawItem.items : [];
+
+  if (rawItems.length === 0) {
+    rawItems = [
+      ...(rawItem.features || []),
+      ...(rawItem.actions || []),
+      ...(rawItem.reactions || []),
+      ...(rawItem.legendary_actions || []),
+      ...(rawItem.spells || []),
+    ];
+  }
 
   const crVal = details.cr ?? rawItem.cr ?? 0;
   const computedProf = calculateProficiency(crVal);
@@ -363,31 +392,44 @@ function extractFormatData(rawItem) {
     spells: [],
   };
 
+  const seenKeys = {
+    features: new Set(),
+    actions: new Set(),
+    reactions: new Set(),
+    legendary_actions: new Set(),
+    spells: new Set(),
+  };
+
   rawItems.forEach((it) => {
+    if (!it || !it.name) return;
     const itType = it.type;
 
     const parsedItem = {
       ...it,
       name: it.name || "Unnamed",
       type: itType,
-      image: ensureHttps(it.img || ""),
-      description: it.system?.description?.value || "",
-      activation: it.system?.activation || {},
-      range: it.system?.range || {},
-      target: it.system?.target || {},
-      uses: it.system?.uses || {},
-      roll: it.system?.formula || it.system?.damage?.parts?.[0]?.[0] || "",
-      save: it.system?.save || {},
+      image: ensureHttps(it.img || it.image || ""),
+      description: it.system?.description?.value || it.description || "",
+      activation: it.system?.activation || it.activation || {},
+      range: it.system?.range || it.range || {},
+      target: it.system?.target || it.target || {},
+      uses: it.system?.uses || it.uses || {},
+      roll: it.system?.formula || it.system?.damage?.parts?.[0]?.[0] || it.roll || "",
+      save: it.system?.save || it.save || {},
     };
 
     const category = classifyFoundryItem(it);
+    const itemKey = `${(itType || category).toLowerCase()}:${it.name.trim().toLowerCase()}`;
+
+    if (seenKeys[category] && seenKeys[category].has(itemKey)) return;
+    if (seenKeys[category]) seenKeys[category].add(itemKey);
 
     if (category === "spells") {
       itemsMap.spells.push({
         ...parsedItem,
-        level: it.system?.level ?? 0,
-        school: it.system?.school || "",
-        components: it.system?.components || {},
+        level: it.system?.level ?? it.level ?? 0,
+        school: it.system?.school || it.school || "",
+        components: it.system?.components || it.components || {},
       });
     } else {
       itemsMap[category].push(parsedItem);
@@ -530,6 +572,19 @@ export async function importBestiaryItems(req, res) {
         rawData.prototypeToken.ring.enabled = false;
       } else {
         rawData.prototypeToken.ring = false;
+      }
+
+      if (Array.isArray(rawData.items)) {
+        const uniqueItems = [];
+        const seen = new Set();
+        for (const it of rawData.items) {
+          if (!it || !it.name) continue;
+          const key = `${(it.type || "item").toLowerCase()}:${it.name.trim().toLowerCase()}`;
+          if (seen.has(key)) continue;
+          seen.add(key);
+          uniqueItems.push(it);
+        }
+        rawData.items = uniqueItems;
       }
 
       item.raw_data = rawData;
