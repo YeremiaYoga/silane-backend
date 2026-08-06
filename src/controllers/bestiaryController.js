@@ -104,12 +104,42 @@ export function ensureHttps(urlStr) {
   return formatImageUrl(urlStr);
 }
 
+export function clean5eToolsText(str) {
+  if (!str || typeof str !== "string") return str;
+  let result = str;
+  result = result.replace(/<a\s+[^>]*href=["'][^"']*5e\.tools[^"']*["'][^>]*>([\s\S]*?)<\/a>/gi, "$1");
+  result = result.replace(/\[([^\]]+)\]\(https?:\/\/[^\s\)]*5e\.tools[^\s\)]*\)/gi, "$1");
+  result = result.replace(/\{@link\s+[^}]*5e\.tools[^}]*\|([^}]+)\}/gi, "$1");
+  result = result.replace(/\{@link\s+([^|}]+)\|[^}]*5e\.tools[^}]*\}/gi, "$1");
+  result = result.replace(/\{@link\s+https?:\/\/[^\s}]*5e\.tools[^\s}]*\s+([^}]+)\}/gi, "$1");
+  result = result.replace(/https?:\/\/[^\s<"'>]*5e\.tools[^\s<"'>]*/gi, "");
+  return result;
+}
+
+export function clean5eToolsBiography(raw) {
+  if (!raw || typeof raw !== "object") return;
+  if (raw.system?.details?.biography?.value) {
+    raw.system.details.biography.value = clean5eToolsText(raw.system.details.biography.value);
+  }
+  if (typeof raw.system?.details?.biography === "string") {
+    raw.system.details.biography = clean5eToolsText(raw.system.details.biography);
+  }
+  if (raw.biography) {
+    if (typeof raw.biography === "string") {
+      raw.biography = clean5eToolsText(raw.biography);
+    } else if (raw.biography.value) {
+      raw.biography.value = clean5eToolsText(raw.biography.value);
+    }
+  }
+}
+
 export function sanitizeItemImages(item) {
   if (!item) return item;
   if (item.image) item.image = formatImageUrl(item.image);
   if (item.img_portrait) item.img_portrait = formatImageUrl(item.img_portrait);
   if (item.img_token) item.img_token = formatImageUrl(item.img_token);
   cleanPlutoniumFlags(item);
+  if (item.biography) item.biography = clean5eToolsText(item.biography);
   return item;
 }
 
@@ -627,8 +657,8 @@ function extractFormatData(rawItem) {
     languages: languages,
     habitat: habitat,
     treasure: treasure,
-    biography: details.biography?.value || (typeof details.biography === "string" ? details.biography : null),
-    public_biography: details.biography?.public || null,
+    biography: clean5eToolsText(details.biography?.value || (typeof details.biography === "string" ? details.biography : null)),
+    public_biography: clean5eToolsText(details.biography?.public || null),
     appearance: details.appearance || null,
     personality_traits: details.trait || null,
     ideals: details.ideal || null,
