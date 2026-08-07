@@ -107,12 +107,13 @@ export function ensureHttps(urlStr) {
 export function clean5eToolsText(str) {
   if (!str || typeof str !== "string") return str;
   let result = str;
-  result = result.replace(/<a\s+[^>]*href=["'][^"']*5e\.tools[^"']*["'][^>]*>([\s\S]*?)<\/a>/gi, "$1");
-  result = result.replace(/\[([^\]]+)\]\(https?:\/\/[^\s\)]*5e\.tools[^\s\)]*\)/gi, "$1");
-  result = result.replace(/\{@link\s+[^}]*5e\.tools[^}]*\|([^}]+)\}/gi, "$1");
-  result = result.replace(/\{@link\s+([^|}]+)\|[^}]*5e\.tools[^}]*\}/gi, "$1");
-  result = result.replace(/\{@link\s+https?:\/\/[^\s}]*5e\.tools[^\s}]*\s+([^}]+)\}/gi, "$1");
-  result = result.replace(/https?:\/\/[^\s<"'>]*5e\.tools[^\s<"'>]*/gi, "");
+  result = result.replace(/<a\s+[^>]*href=["'][^"']*(?:5e\.tools?|5etools)[^"']*["'][^>]*>([\s\S]*?)<\/a>/gi, "$1");
+  result = result.replace(/\[([^\]]+)\]\((?:https?:\/\/)?(?:[^\s\)]*)(?:5e\.tools?|5etools)[^\s\)]*\)/gi, "$1");
+  result = result.replace(/\{@(?:link|5etools)\s+[^}]*(?:5e\.tools?|5etools)[^}]*\|([^}]+)\}/gi, "$1");
+  result = result.replace(/\{@(?:link|5etools)\s+([^|}]+)\|[^}]*(?:5e\.tools?|5etools)[^}]*\}/gi, "$1");
+  result = result.replace(/\{@(?:link|5etools)\s+(?:https?:\/\/)?(?:[^\s}]*)(?:5e\.tools?|5etools)[^\s}]*\s+([^}]+)\}/gi, "$1");
+  result = result.replace(/\{@(?:link|5etools)\s+(?:https?:\/\/)?(?:[^\s}]*)(?:5e\.tools?|5etools)[^\s}]*\}/gi, "");
+  result = result.replace(/https?:\/\/[^\s<"'>]*(?:5e\.tools?|5etools)[^\s<"'>]*/gi, "");
   return result;
 }
 
@@ -121,14 +122,18 @@ export function clean5eToolsBiography(raw) {
   if (raw.system?.details?.biography?.value) {
     raw.system.details.biography.value = clean5eToolsText(raw.system.details.biography.value);
   }
+  if (raw.system?.details?.biography?.public) {
+    raw.system.details.biography.public = clean5eToolsText(raw.system.details.biography.public);
+  }
   if (typeof raw.system?.details?.biography === "string") {
     raw.system.details.biography = clean5eToolsText(raw.system.details.biography);
   }
   if (raw.biography) {
     if (typeof raw.biography === "string") {
       raw.biography = clean5eToolsText(raw.biography);
-    } else if (raw.biography.value) {
-      raw.biography.value = clean5eToolsText(raw.biography.value);
+    } else if (typeof raw.biography === "object") {
+      if (raw.biography.value) raw.biography.value = clean5eToolsText(raw.biography.value);
+      if (raw.biography.public) raw.biography.public = clean5eToolsText(raw.biography.public);
     }
   }
 }
@@ -203,6 +208,8 @@ export async function uploadExternalUrlToR2(urlStr, fvttId, imageType, user) {
 export function cleanPlutoniumFlags(obj) {
   if (!obj || typeof obj !== "object") return obj;
 
+  clean5eToolsBiography(obj);
+
   if (Array.isArray(obj)) {
     obj.forEach((it) => cleanPlutoniumFlags(it));
     return obj;
@@ -224,6 +231,8 @@ export function cleanPlutoniumFlags(obj) {
         obj[key] = GENERIC_FEATURE_FULL_URL;
       } else if (key === "img" || key === "image" || key === "src") {
         obj[key] = formatImageUrl(val);
+      } else if (/(?:5e\.tools?|5etools)/i.test(val)) {
+        obj[key] = clean5eToolsText(val);
       }
     } else if (val && typeof val === "object") {
       cleanPlutoniumFlags(val);

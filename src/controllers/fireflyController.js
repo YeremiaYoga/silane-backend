@@ -37,6 +37,7 @@ import {
 
   listAllHomebrewItems,
 } from "../models/fireflyModel.js";
+import { clean5eToolsText, cleanPlutoniumFlags } from "./bestiaryController.js";
 
 const ALLOWED_TYPES = getValidTypes();
 const HOMEBREW_TYPES = getHomebrewValidTypes();
@@ -264,14 +265,45 @@ function buildSpellPayload(raw, normalized) {
 
 function buildFeatPayload(raw, normalized) {
   const { name, type, system, img } = normalized;
+
+  cleanPlutoniumFlags(raw);
+  cleanPlutoniumFlags(normalized);
+
+  const descriptionVal = clean5eToolsText(
+    system?.description?.value || (typeof system?.description === "string" ? system.description : "")
+  );
+
+  let featType = system?.type?.value || system?.type?.label || (typeof system?.type === "string" ? system.type : null);
+  if (featType === "feat" || !featType) featType = "general";
+
+  let prereqs = system?.prerequisites || {};
+  let reqs = system?.requirements || null;
+  if (!reqs && prereqs?.level) {
+    reqs = `Level ${prereqs.level}`;
+  }
+
+  const sourceBook = getSourceBook(system);
+  const compSource = getCompendiumSource(raw);
+  const properties = Array.isArray(system?.properties)
+    ? system.properties
+    : (system?.properties && typeof system?.properties === "object" ? Object.keys(system.properties) : []);
+
+  if (system?.description && typeof system.description === "object") {
+    system.description.value = descriptionVal;
+  }
+
   return {
-    name, type,
-    feat_type: system?.type?.value ?? null,
-    prerequisites: system?.prerequisites ?? {},
+    name,
+    type: "feat",
+    feat_type: featType,
+    prerequisites: prereqs,
     fvtt_id: resolveFvttId(raw),
-    requirements: system?.requirements ?? null,
+    requirements: reqs,
+    description: descriptionVal,
+    source_book: sourceBook,
+    compendium_source: compSource,
     image: resolveImage(raw?.img || img),
-    properties: system?.properties ?? [],
+    properties: properties,
     uses: system?.uses ?? {},
     raw_data: raw,
     format_data: normalized,
