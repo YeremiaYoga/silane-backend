@@ -37,7 +37,12 @@ import {
 
   listAllHomebrewItems,
 } from "../models/fireflyModel.js";
-import { clean5eToolsText, cleanPlutoniumFlags } from "./bestiaryController.js";
+import {
+  clean5eToolsText,
+  cleanPlutoniumFlags,
+  formatImageUrl,
+} from "./bestiaryController.js";
+import { uploadAssetToR2 } from "../utils/r2.js";
 
 const ALLOWED_TYPES = getValidTypes();
 const HOMEBREW_TYPES = getHomebrewValidTypes();
@@ -53,6 +58,81 @@ const TYPE_TO_FIREFLY_COLUMN = {
   tool: "tools",
 };
 
+export async function uploadFireflyImage(req, res) {
+  try {
+    const file = req.file;
+    const { item_id = "item", item_type = "item" } = req.body;
+    const user = req.user;
+
+    if (!file) {
+      return res
+        .status(400)
+        .json({ success: false, message: "No image file provided." });
+    }
+
+    const isAdmin = user.role === "admin";
+    const userIdentifier =
+      user.silane_id ||
+      user.public_id ||
+      user.id ||
+      user.username ||
+      "user";
+
+    const customFileName = `${item_type}-${item_id}-${Date.now()}.webp`;
+
+    const adminBucket = (process.env.IGNITE_BUCKET_NAME || "projectignite").trim();
+    const adminDomain = (
+      process.env.IGNITE_PUBLIC_DOMAIN ||
+      "https://019a0f6bb5a27dc5b6ab32a19a8ad5d6.phanneldeliver.my.id"
+    ).trim();
+    const silaneBucket = (process.env.SILANE_BUCKET_NAME || "silane").trim();
+    const silaneDomain = (
+      process.env.SILANE_PUBLIC_DOMAIN ||
+      "https://sih4storage.phanneldeliver.my.id"
+    ).trim();
+
+    let folderName = "";
+    let bucketName = "";
+    let domainUrl = "";
+
+    if (isAdmin) {
+      folderName = "firefly";
+      bucketName = adminBucket;
+      domainUrl = adminDomain;
+    } else {
+      folderName = userIdentifier;
+      bucketName = silaneBucket;
+      domainUrl = silaneDomain;
+    }
+
+    const publicUrl = await uploadAssetToR2({
+      file,
+      folderName,
+      customFileName,
+      bucketName,
+      domainUrl,
+    });
+
+    if (!publicUrl) {
+      return res.status(500).json({
+        success: false,
+        message: "Failed to upload image to Cloudflare R2.",
+      });
+    }
+
+    return res.json({
+      success: true,
+      url: publicUrl,
+      is_global: isAdmin,
+      folder: folderName,
+      filename: customFileName,
+    });
+  } catch (error) {
+    console.error("uploadFireflyImage error:", error);
+    return res.status(500).json({ success: false, message: error.message });
+  }
+}
+
 function normalizeItem(raw) {
   if (!raw || typeof raw !== "object") throw new Error("Invalid item JSON");
   const name = raw.name || "Unknown Item";
@@ -66,7 +146,7 @@ function normalizeItem(raw) {
 function resolveImage(itemImg) {
   if (!itemImg) return null;
   if (/^https?:\/\//i.test(itemImg)) return itemImg;
-  return itemImg;
+  return formatImageUrl(itemImg);
 }
 
 function getCompendiumSource(rawItem) {

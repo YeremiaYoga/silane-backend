@@ -1,6 +1,7 @@
 import express from "express";
 import {
   importFireflyItems,
+  uploadFireflyImage,
   listFireflyItems,
   getFireflyItem,
   deleteFireflyItems,
@@ -15,10 +16,13 @@ import {
   getHomebrewUsage,
   adminListAllHomebrew,
 } from "../controllers/fireflyController.js";
+import upload from "../middlewares/uploadMiddleware.js";
 import { verifyToken } from "../middlewares/authMiddleware.js";
 const router = express.Router();
 
 router.use(verifyToken);
+
+router.post("/upload_image", upload.single("file"), uploadFireflyImage);
 
 router.get("/types", getFireflyTypes);
 
