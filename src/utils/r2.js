@@ -134,7 +134,14 @@ export async function getFileSizeFromR2(fileUrl) {
     const res = await s3Client.send(command);
     return res.ContentLength || 0;
   } catch (err) {
-    console.error(`💥 R2 Head Error:`, err);
+    if (
+      err.name === "NotFound" ||
+      err.name === "NoSuchKey" ||
+      err.$metadata?.httpStatusCode === 404
+    ) {
+      return 0;
+    }
+    console.warn(`⚠️ R2 Head Error for ${fileUrl}:`, err.message || err);
     return 0;
   }
 }
