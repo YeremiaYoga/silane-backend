@@ -10,7 +10,8 @@ export const getIgniteCharacters = async (req, res) => {
     const { data, error } = await getIgniteCharactersByUserId(userId);
     if (error) throw error;
 
-    res.status(200).json({ success: true, data: data || [] });
+    const username = req.user?.username || null;
+    res.status(200).json({ success: true, data: data || [], username });
   } catch (error) {
     console.error("❌ getIgniteCharacters error:", error);
     res.status(500).json({ success: false, message: "Failed to fetch Ignite characters", error: error.message });
