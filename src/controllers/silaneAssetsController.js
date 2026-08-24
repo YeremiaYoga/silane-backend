@@ -1179,3 +1179,19 @@ export const deleteCharacterBackup = async (req, res) => {
     res.status(500).json({ message: "Failed to delete backup", error: error.message });
   }
 };
+
+export const proxyImage = async (req, res) => {
+  try {
+    const imageUrl = req.query.url;
+    if (!imageUrl) return res.status(400).send("No url provided");
+    const fetchRes = await fetch(imageUrl);
+    if (!fetchRes.ok) return res.status(fetchRes.status).send("Failed to fetch target image");
+    const contentType = fetchRes.headers.get("content-type") || "image/png";
+    res.setHeader("Content-Type", contentType);
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    const arrayBuffer = await fetchRes.arrayBuffer();
+    return res.send(Buffer.from(arrayBuffer));
+  } catch (err) {
+    return res.status(500).send(err.message);
+  }
+};

@@ -16,10 +16,12 @@ import {
   getCharacterBackups,
   getSingleBackupData,
   deleteCharacterBackup,
+  proxyImage,
 } from "../controllers/silaneAssetsController.js";
 import upload from "../middlewares/uploadMiddleware.js";
 import { verifyToken } from "../middlewares/authMiddleware.js";
 const router = express.Router();
+router.get("/proxy-image", proxyImage);
 router.get("/data", verifyToken, getDataSilane);
 router.get("/usage", verifyToken, getStorageUsage);
 
