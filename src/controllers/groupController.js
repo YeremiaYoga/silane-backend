@@ -65,20 +65,46 @@ const hydrateGroupResources = async (resources) => {
 export const getGroupById = async (req, res) => {
   try {
     const { id } = req.params;
-    const { data, error } = await supabase
+    if (!id) return res.status(400).json({ success: false, message: "ID is required" });
+    const cleanId = String(id).trim();
+
+    const selectFields = "id, name, description, color, icon, share_code, silane_group_id, members, resources, missions, max_members, creator_name, creator_id, created_at, roles, friend_invite_enabled, tarot_card";
+
+    // 1. Try searching by silane_group_id FIRST (e.g. "3L8QMHU1IZ3E")
+    const bySilane = await supabase
       .from("groups")
-      .select("id, name, description, color, icon, share_code, members, resources, missions, max_members, creator_name, creator_id, created_at, roles, friend_invite_enabled, tarot_card")
-      .eq("id", id)
-      .single();
+      .select(selectFields)
+      .eq("silane_group_id", cleanId)
+      .maybeSingle();
 
-    if (error) {
-      if (error.code === "PGRST116") return res.status(404).json({ success: false, message: "Group not found" });
-      throw error;
+    let data = bySilane?.data;
+
+    // 2. Try searching by share_code SECOND
+    if (!data) {
+      const byShare = await supabase
+        .from("groups")
+        .select(selectFields)
+        .eq("share_code", cleanId)
+        .maybeSingle();
+      data = byShare?.data;
     }
 
-    if (data) {
-      data.resources = await hydrateGroupResources(data.resources);
+    // 3. Try searching by UUID id THIRD (ONLY if cleanId is a valid UUID format!)
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(cleanId);
+    if (!data && isUuid) {
+      const byUuid = await supabase
+        .from("groups")
+        .select(selectFields)
+        .eq("id", cleanId)
+        .maybeSingle();
+      data = byUuid?.data;
     }
+
+    if (!data) {
+      return res.status(404).json({ success: false, message: "Group not found" });
+    }
+
+    data.resources = await hydrateGroupResources(data.resources);
 
     return res.json({ success: true, data });
   } catch (err) {
