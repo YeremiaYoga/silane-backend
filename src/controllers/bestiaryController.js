@@ -829,12 +829,13 @@ export async function listBestiaryItems(req, res) {
   try {
     const user = req.user;
     const isAdmin = user.role === "admin";
-    const { view = "foundry", search = "", limit = 200, offset = 0, type = "" } = req.query;
+    const { view = "foundry", search = "", limit = 200, offset = 0, type = "", all = "false" } = req.query;
 
     let result;
     if (view === "homebrew") {
+      const targetUserId = (all === "true" || isAdmin) ? (req.query.user_id || null) : (user.id || user.user_id);
       result = await listHomebrewBestiary({
-        userId: isAdmin ? req.query.user_id || null : (user.id || user.user_id),
+        userId: targetUserId,
         search,
         limit: parseInt(limit),
         offset: parseInt(offset),

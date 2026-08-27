@@ -118,7 +118,7 @@ export const getGroupByShareCode = async (req, res) => {
     const { code } = req.params;
     const { data, error } = await supabase
       .from("groups")
-      .select("id, name, description, color, icon, share_code, members, resources, missions, max_members, creator_name, creator_id, created_at, roles, friend_invite_enabled, tarot_card")
+      .select("id, name, description, color, icon, share_code, silane_group_id, members, resources, missions, max_members, creator_name, creator_id, created_at, roles, friend_invite_enabled, tarot_card")
       .eq("share_code", code)
       .single();
 
@@ -145,7 +145,7 @@ export const getUserGroups = async (req, res) => {
 
     const { data, error } = await supabase
       .from("groups")
-      .select("id, name, description, color, icon, share_code, members, resources, missions, max_members, creator_name, creator_id, created_at, roles, friend_invite_enabled, tarot_card");
+      .select("id, name, description, color, icon, share_code, silane_group_id, members, resources, missions, max_members, creator_name, creator_id, created_at, roles, friend_invite_enabled, tarot_card");
 
     if (error) throw error;
 
