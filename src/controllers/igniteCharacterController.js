@@ -31,7 +31,7 @@ export const getIgniteCharacterByCodeController = async (req, res) => {
       return res.status(404).json({ success: false, message: "Character not found with provided code" });
     }
 
-    res.status(200).json({ success: true, data });
+    res.status(200).json({ success: true, data, character: data });
   } catch (error) {
     console.error("❌ getIgniteCharacterByCode error:", error);
     res.status(500).json({ success: false, message: "Failed to fetch character by code", error: error.message });

@@ -70,7 +70,6 @@ export const getGroupById = async (req, res) => {
 
     const selectFields = "id, name, description, color, icon, share_code, silane_group_id, members, resources, missions, max_members, creator_name, creator_id, created_at, roles, friend_invite_enabled, tarot_card";
 
-    // 1. Try searching by silane_group_id FIRST (e.g. "3L8QMHU1IZ3E")
     const bySilane = await supabase
       .from("groups")
       .select(selectFields)
@@ -79,7 +78,6 @@ export const getGroupById = async (req, res) => {
 
     let data = bySilane?.data;
 
-    // 2. Try searching by share_code SECOND
     if (!data) {
       const byShare = await supabase
         .from("groups")
@@ -89,7 +87,6 @@ export const getGroupById = async (req, res) => {
       data = byShare?.data;
     }
 
-    // 3. Try searching by UUID id THIRD (ONLY if cleanId is a valid UUID format!)
     const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(cleanId);
     if (!data && isUuid) {
       const byUuid = await supabase

@@ -7,6 +7,7 @@ import groupRoutes from './routes/groupRoutes.js';
 import igniteCharacterRoutes from './routes/igniteCharacterRoutes.js';
 import bestiaryRoutes from './routes/bestiaryRoutes.js';
 import friendshipRoutes from './routes/friendshipRoutes.js';
+import relationMapRoutes from './routes/relationMapRoutes.js';
 const app = express();
 app.use(cookieParser());
 app.use(express.json({ limit: '10mb' }));
@@ -23,11 +24,14 @@ app.use((req, res, next) => {
 app.use("/api/auth", authRoutes);
 app.use('/api/silane_assets', silaneAssetsRoutes);
 app.use('/api/silane_assets', igniteCharacterRoutes);
+app.use('/', igniteCharacterRoutes);
 app.use('/api/firefly', fireflyRoutes);
 app.use('/api/groups', groupRoutes);
 app.use('/api/bestiary', bestiaryRoutes);
 app.use('/api/friends', friendshipRoutes);
 app.use('/friends', friendshipRoutes);
+app.use('/api/relation-maps', relationMapRoutes);
+app.use('/api/relation-map', relationMapRoutes);
 app.get("/", (req, res) => {
   const formattedTime = new Date().toLocaleString("en-US", {
     timeZone: "Asia/Jakarta",
