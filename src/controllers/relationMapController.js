@@ -2,6 +2,7 @@ import {
   saveRelationMap as saveRelationMapModel,
   getRelationMapsByUserId,
   getRelationMapById as getRelationMapByIdModel,
+  getRelationMapByShareId as getRelationMapByShareIdModel,
   deleteRelationMapById
 } from "../models/relationMapModel.js";
 
@@ -15,14 +16,39 @@ export const saveRelationMap = async (req, res) => {
       });
     }
 
-    const { id, title, subtitle, characters, is_public, bg_image } = req.body;
+    const {
+      id,
+      share_id,
+      title,
+      subtitle,
+      characters,
+      bestiary,
+      items,
+      relationships,
+      groups,
+      tags,
+      show_groups,
+      bg_opacity,
+      global_node_size,
+      is_public,
+      bg_image
+    } = req.body;
 
     const data = await saveRelationMapModel({
       id: id || undefined,
       userId,
+      share_id,
       title,
       subtitle,
       characters,
+      bestiary,
+      items,
+      relationships,
+      groups,
+      tags,
+      show_groups,
+      bg_opacity,
+      global_node_size,
       is_public,
       bg_image
     });
@@ -86,6 +112,31 @@ export const getRelationMapById = async (req, res) => {
     });
   } catch (error) {
     console.error("❌ getRelationMapById error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Gagal mengambil data Relation Map.",
+      error: error.message
+    });
+  }
+};
+
+export const getRelationMapByShareId = async (req, res) => {
+  try {
+    const { share_id } = req.params;
+    const data = await getRelationMapByShareIdModel(share_id);
+    if (!data) {
+      return res.status(404).json({
+        success: false,
+        message: "Relation Map tidak ditemukan."
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      data
+    });
+  } catch (error) {
+    console.error("❌ getRelationMapByShareId error:", error);
     return res.status(500).json({
       success: false,
       message: "Gagal mengambil data Relation Map.",

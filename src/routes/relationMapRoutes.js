@@ -4,6 +4,7 @@ import {
   saveRelationMap,
   getUserRelationMaps,
   getRelationMapById,
+  getRelationMapByShareId,
   deleteRelationMap
 } from "../controllers/relationMapController.js";
 
@@ -13,6 +14,7 @@ router.use(optionalAuth);
 
 router.get("/", getUserRelationMaps);
 router.post("/", saveRelationMap);
+router.get("/share/:share_id", getRelationMapByShareId);
 router.get("/:id", getRelationMapById);
 router.delete("/:id", deleteRelationMap);
 
